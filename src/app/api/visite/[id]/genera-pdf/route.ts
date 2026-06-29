@@ -1,0 +1,159 @@
+import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getVisitaById } from "@/lib/db/queries/visite";
+import { getRisposteByVisita } from "@/lib/db/queries/risposte";
+import {
+  BUCKET_VERBALI,
+  prossimoNumeroVerbale,
+} from "@/lib/db/queries/verbali";
+import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
+
+export const runtime = "nodejs";
+
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  // 1. Autenticazione server-side
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
+  }
+
+  // 2. Carica la visita (RLS: solo proprietario o admin)
+  const visita = await getVisitaById(id);
+  if (!visita) {
+    return NextResponse.json({ error: "Visita non trovata" }, { status: 404 });
+  }
+
+  // 3. Deve essere in bozza
+  if (visita.stato !== "bozza") {
+    return NextResponse.json(
+      { error: "La visita non è in bozza: verbale già generato o non modificabile." },
+      { status: 409 }
+    );
+  }
+
+  // 4. Nessuna domanda obbligatoria senza risposta
+  const risposte = await getRisposteByVisita(id);
+  const valorePer = new Map(risposte.map((r) => [r.domanda_id, r.valore]));
+  let obbligatorieMancanti = 0;
+  for (const sez of visita.template_snapshot.sezioni) {
+    for (const d of sez.domande) {
+      if (d.obbligatoria && !valorePer.get(d.id)) obbligatorieMancanti += 1;
+    }
+  }
+  if (obbligatorieMancanti > 0) {
+    return NextResponse.json(
+      {
+        error: `${obbligatorieMancanti} domande obbligatorie senza risposta: impossibile generare il verbale.`,
+      },
+      { status: 422 }
+    );
+  }
+
+  // 5. Numero verbale SC-YYYY-NNNN
+  const anno = new Date().getFullYear();
+  const numeroVerbale = await prossimoNumeroVerbale(anno);
+
+  // 6. Dati per il PDF
+  const dati: VerbaleData = {
+    visita: {
+      id: visita.id,
+      data_visita: visita.data_visita,
+      note_finali_visita: visita.note_conclusive,
+      numero_verbale: numeroVerbale,
+    },
+    cliente: { ragione_sociale: visita.cliente_nome },
+    sede: {
+      nome: visita.sede_nome,
+      indirizzo: visita.sede_indirizzo,
+      citta: visita.sede_citta,
+    },
+    specialist: { nome_completo: visita.specialist_nome },
+    template: visita.template_snapshot,
+    risposte: Object.fromEntries(
+      risposte.map((r) => [
+        r.domanda_id,
+        { esito: r.valore, azione_correttiva: r.azione_correttiva },
+      ])
+    ),
+  };
+
+  const admin = createAdminClient();
+  const storagePath = `${visita.id}/${numeroVerbale}.pdf`;
+  let uploaded = false;
+
+  try {
+    // 7. Genera il PDF
+    const buffer = await generaVerbale(dati);
+
+    // 8. SHA256
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+
+    // 9. Upload su bucket privato
+    const { error: upErr } = await admin.storage
+      .from(BUCKET_VERBALI)
+      .upload(storagePath, buffer, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+    if (upErr) {
+      throw new Error(`Upload storage fallito: ${upErr.message}`);
+    }
+    uploaded = true;
+
+    // 10. Record in verbali_pdf
+    const { error: insErr } = await admin.from("verbali_pdf").insert({
+      visita_id: visita.id,
+      storage_path: storagePath,
+      sha256_hash: sha256,
+      numero_versione: 1,
+      dimensione_bytes: buffer.length,
+      generato_da: user.id,
+    });
+    if (insErr) {
+      throw new Error(`Inserimento verbali_pdf fallito: ${insErr.message}`);
+    }
+
+    // 11. Chiusura verbale: numero + stati + timestamp
+    const ora = new Date().toISOString();
+    const { error: updErr } = await admin
+      .from("visite")
+      .update({
+        numero_verbale: numeroVerbale,
+        stato: "verbale_generato",
+        stato_verbale: "chiuso",
+        completata_il: ora,
+        verbale_generato_il: ora,
+      })
+      .eq("id", visita.id);
+    if (updErr) {
+      // rollback record verbali_pdf
+      await admin.from("verbali_pdf").delete().eq("storage_path", storagePath);
+      throw new Error(`Chiusura visita fallita: ${updErr.message}`);
+    }
+
+    // 12. OK
+    return NextResponse.json({
+      success: true,
+      numero_verbale: numeroVerbale,
+      visita_id: visita.id,
+    });
+  } catch (e) {
+    // Rollback: rimuovi il file caricato
+    if (uploaded) {
+      await admin.storage.from(BUCKET_VERBALI).remove([storagePath]);
+    }
+    const msg = e instanceof Error ? e.message : "Errore generazione verbale.";
+    console.error("genera-pdf:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

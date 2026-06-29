@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ConteggiSezione } from "./page";
 import { salvaNoteFinaliAction } from "./actions";
 
@@ -14,6 +15,8 @@ interface Totali {
 
 interface Props {
   visitaId: string;
+  stato: string;
+  numeroVerbale: string | null;
   conteggi: ConteggiSezione[];
   totali: Totali;
   noteIniziali: string;
@@ -23,15 +26,20 @@ type Stato = "idle" | "saving" | "saved" | "error";
 
 export default function RiepilogoClient({
   visitaId,
+  stato,
+  numeroVerbale,
   conteggi,
   totali,
   noteIniziali,
 }: Props) {
+  const router = useRouter();
   const [note, setNote] = useState(noteIniziali);
   const [statoNote, setStatoNote] = useState<Stato>("idle");
-  const [comingSoon, setComingSoon] = useState(false);
+  const [generando, setGenerando] = useState(false);
+  const [erroreGen, setErroreGen] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const chiusa = stato !== "bozza";
   const bloccato = totali.obbligatorieSenzaRisposta > 0;
 
   function handleNote(testo: string) {
@@ -42,6 +50,28 @@ export default function RiepilogoClient({
       const res = await salvaNoteFinaliAction(visitaId, testo);
       setStatoNote(res.ok ? "saved" : "error");
     }, 800);
+  }
+
+  async function generaPdf() {
+    setGenerando(true);
+    setErroreGen(null);
+    try {
+      const res = await fetch(`/api/visite/${visitaId}/genera-pdf`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error ?? "Errore durante la generazione del verbale.");
+      }
+      // Stato aggiornato a "chiuso": ricarica i dati server-side.
+      router.refresh();
+    } catch (e) {
+      setErroreGen(
+        e instanceof Error ? e.message : "Errore durante la generazione del verbale."
+      );
+    } finally {
+      setGenerando(false);
+    }
   }
 
   return (
@@ -106,33 +136,50 @@ export default function RiepilogoClient({
         />
       </div>
 
-      {/* Note finali */}
+      {/* Note finali (sola lettura se chiusa) */}
       <div>
         <div className="flex items-center justify-between">
           <label className="block text-sm font-medium text-gray-700">
             Note finali visita
           </label>
-          <span className="text-xs text-gray-400">
-            {statoNote === "saving"
-              ? "Salvataggio…"
-              : statoNote === "saved"
-                ? "Salvato"
-                : statoNote === "error"
-                  ? "Errore di salvataggio"
-                  : ""}
-          </span>
+          {!chiusa && (
+            <span className="text-xs text-gray-400">
+              {statoNote === "saving"
+                ? "Salvataggio…"
+                : statoNote === "saved"
+                  ? "Salvato"
+                  : statoNote === "error"
+                    ? "Errore di salvataggio"
+                    : ""}
+            </span>
+          )}
         </div>
         <textarea
           value={note}
           onChange={(e) => handleNote(e.target.value)}
           rows={4}
+          disabled={chiusa}
           placeholder="Osservazioni conclusive, raccomandazioni, accordi sui tempi…"
-          className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+          className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50 disabled:text-gray-500"
         />
       </div>
 
+      {/* Verbale chiuso */}
+      {chiusa && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          Verbale generato e chiuso
+          {numeroVerbale ? (
+            <>
+              {" "}
+              — <span className="font-semibold">{numeroVerbale}</span>
+            </>
+          ) : null}
+          . Il PDF è immutabile.
+        </div>
+      )}
+
       {/* Blocco chiusura */}
-      {bloccato && (
+      {!chiusa && bloccato && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {totali.obbligatorieSenzaRisposta} domand
           {totali.obbligatorieSenzaRisposta === 1 ? "a" : "e"} obbligator
@@ -141,9 +188,9 @@ export default function RiepilogoClient({
         </div>
       )}
 
-      {comingSoon && !bloccato && (
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Generazione PDF in arrivo nello Sprint 6 (Coming soon).
+      {erroreGen && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {erroreGen}
         </div>
       )}
 
@@ -153,16 +200,26 @@ export default function RiepilogoClient({
           href={`/visite/${visitaId}/checklist`}
           className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
         >
-          Torna alla checklist
+          {chiusa ? "Apri checklist (sola lettura)" : "Torna alla checklist"}
         </Link>
-        <button
-          type="button"
-          disabled={bloccato}
-          onClick={() => setComingSoon(true)}
-          className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Genera verbale PDF
-        </button>
+
+        {chiusa ? (
+          <a
+            href={`/api/visite/${visitaId}/download-pdf`}
+            className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+          >
+            Scarica PDF
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled={bloccato || generando}
+            onClick={generaPdf}
+            className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {generando ? "Generazione verbale in corso…" : "Genera verbale PDF"}
+          </button>
+        )}
       </div>
     </div>
   );

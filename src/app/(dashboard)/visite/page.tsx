@@ -1,22 +1,6 @@
 import Link from "next/link";
-import { getVisiteUtente, type StatoVisita } from "@/lib/db/queries/visite";
+import { getVisiteUtente } from "@/lib/db/queries/visite";
 import { formatDate } from "@/lib/utils";
-
-const STILE_STATO: Record<StatoVisita, string> = {
-  pianificata: "bg-gray-100 text-gray-700",
-  in_corso: "bg-blue-100 text-blue-700",
-  bozza: "bg-amber-100 text-amber-800",
-  completata: "bg-green-100 text-green-700",
-  verbale_generato: "bg-[#1e3a5f] text-white",
-};
-
-const ETICHETTA_STATO: Record<StatoVisita, string> = {
-  pianificata: "Pianificata",
-  in_corso: "In corso",
-  bozza: "Bozza",
-  completata: "Completata",
-  verbale_generato: "Verbale generato",
-};
 
 export default async function VisitePage() {
   const visite = await getVisiteUtente();
@@ -53,14 +37,13 @@ export default async function VisitePage() {
                 <th className="px-4 py-3 font-medium">Azienda</th>
                 <th className="px-4 py-3 font-medium">Sede</th>
                 <th className="px-4 py-3 font-medium">Data</th>
-                <th className="px-4 py-3 font-medium">Stato</th>
+                <th className="px-4 py-3 font-medium">Verbale</th>
                 <th className="px-4 py-3 text-right font-medium">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visite.map((v) => {
-                const leggibile =
-                  v.stato === "completata" || v.stato === "verbale_generato";
+                const chiusa = v.numero_verbale != null;
                 return (
                   <tr key={v.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">
@@ -71,19 +54,43 @@ export default async function VisitePage() {
                       {formatDate(v.data_visita)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STILE_STATO[v.stato]}`}
-                      >
-                        {ETICHETTA_STATO[v.stato]}
-                      </span>
+                      {chiusa ? (
+                        <a
+                          href={`/api/visite/${v.id}/download-pdf`}
+                          className="font-medium text-[#1e3a5f] hover:underline"
+                        >
+                          {v.numero_verbale}
+                        </a>
+                      ) : (
+                        <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          Bozza
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/visite/${v.id}/${leggibile ? "riepilogo" : "checklist"}`}
-                        className="font-medium text-[#1e3a5f] hover:underline"
-                      >
-                        {leggibile ? "Leggi" : "Continua"}
-                      </Link>
+                      {chiusa ? (
+                        <span className="inline-flex items-center gap-3">
+                          <a
+                            href={`/api/visite/${v.id}/download-pdf`}
+                            className="font-medium text-[#1e3a5f] hover:underline"
+                          >
+                            Scarica PDF
+                          </a>
+                          <span
+                            title="Disponibile nello Sprint 7"
+                            className="cursor-not-allowed text-gray-300"
+                          >
+                            Duplica
+                          </span>
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/visite/${v.id}/checklist`}
+                          className="font-medium text-[#1e3a5f] hover:underline"
+                        >
+                          Continua
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 );

@@ -91,6 +91,8 @@ export default async function RiepilogoPage({
 
       <RiepilogoClient
         visitaId={id}
+        stato={visita.stato}
+        numeroVerbale={visita.numero_verbale}
         conteggi={conteggi}
         totali={totali}
         noteIniziali={visita.note_conclusive ?? ""}

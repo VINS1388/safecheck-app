@@ -12,12 +12,14 @@ export interface VisitaDettaglio {
   specialist_id: string;
   stato: StatoVisita;
   data_visita: string;
+  numero_verbale: string | null;
   note_conclusive: string | null;
   template_snapshot: TemplateSnapshot;
   cliente_nome: string;
   sede_nome: string;
   sede_indirizzo: string;
   sede_citta: string;
+  specialist_nome: string;
 }
 
 /** Riga sintetica per gli elenchi (lista visite, visite per cliente). */
@@ -25,6 +27,7 @@ export interface VisitaRiepilogo {
   id: string;
   stato: StatoVisita;
   data_visita: string;
+  numero_verbale: string | null;
   cliente_nome: string;
   sede_nome: string;
 }
@@ -36,17 +39,20 @@ interface VisitaConRelazioni {
   specialist_id: string;
   stato: StatoVisita;
   data_visita: string;
+  numero_verbale: string | null;
   note_conclusive: string | null;
   template_snapshot: TemplateSnapshot;
   clienti: { ragione_sociale: string } | null;
   sedi: { nome: string; indirizzo: string; citta: string } | null;
+  utenti: { nome_completo: string } | null;
 }
 
 const SELECT_DETTAGLIO = `
-  id, cliente_id, sede_id, specialist_id, stato, data_visita, note_conclusive,
-  template_snapshot,
+  id, cliente_id, sede_id, specialist_id, stato, data_visita, numero_verbale,
+  note_conclusive, template_snapshot,
   clienti ( ragione_sociale ),
-  sedi ( nome, indirizzo, citta )
+  sedi ( nome, indirizzo, citta ),
+  utenti ( nome_completo )
 `;
 
 /**
@@ -121,12 +127,14 @@ export async function getVisitaById(id: string): Promise<VisitaDettaglio | null>
     specialist_id: v.specialist_id,
     stato: v.stato,
     data_visita: v.data_visita,
+    numero_verbale: v.numero_verbale,
     note_conclusive: v.note_conclusive,
     template_snapshot: v.template_snapshot,
     cliente_nome: v.clienti?.ragione_sociale ?? "—",
     sede_nome: v.sedi?.nome ?? "—",
     sede_indirizzo: v.sedi?.indirizzo ?? "",
     sede_citta: v.sedi?.citta ?? "",
+    specialist_nome: v.utenti?.nome_completo ?? "—",
   };
 }
 
@@ -136,7 +144,7 @@ export async function getVisiteByCliente(clienteId: string): Promise<VisitaRiepi
 
   const { data, error } = await supabase
     .from("visite")
-    .select(`id, stato, data_visita, clienti ( ragione_sociale ), sedi ( nome )`)
+    .select(`id, stato, data_visita, numero_verbale, clienti ( ragione_sociale ), sedi ( nome )`)
     .eq("cliente_id", clienteId)
     .order("data_visita", { ascending: false });
 
@@ -154,7 +162,7 @@ export async function getVisiteUtente(): Promise<VisitaRiepilogo[]> {
 
   const { data, error } = await supabase
     .from("visite")
-    .select(`id, stato, data_visita, clienti ( ragione_sociale ), sedi ( nome )`)
+    .select(`id, stato, data_visita, numero_verbale, clienti ( ragione_sociale ), sedi ( nome )`)
     .order("data_visita", { ascending: false });
 
   if (error || !data) return [];
@@ -167,6 +175,7 @@ function mapRiepilogo(v: VisitaConRelazioni): VisitaRiepilogo {
     id: v.id,
     stato: v.stato,
     data_visita: v.data_visita,
+    numero_verbale: v.numero_verbale,
     cliente_nome: v.clienti?.ragione_sociale ?? "—",
     sede_nome: v.sedi?.nome ?? "—",
   };
