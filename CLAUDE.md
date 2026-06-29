@@ -1,20 +1,21 @@
 # SafeCheck — Istruzioni per Claude Code
 
-> ⚠️ Questa versione di Next.js può avere breaking changes rispetto a quanto noto.
+> ⚠️ Lo stack gira su Next.js 16 (App Router): può avere breaking changes rispetto a Next 14/15.
 > Vedi `AGENTS.md` e i doc in `node_modules/next/dist/docs/` prima di scrivere codice Next.
+> Nota: in Next 16 la auth pre-request usa il file `src/proxy.ts` (l'ex `middleware`).
 
 ## Progetto
 Piattaforma web per sopralluoghi sicurezza sul lavoro (D.Lgs. 81/2008).
 Sostituisce workflow Excel con app cloud multi-utente.
 
 ## Stack
-- Framework: Next.js 14 App Router + TypeScript
+- Framework: Next.js 16 App Router + React 19 + TypeScript
 - Database: Supabase (PostgreSQL)
-- ORM: Prisma
+- ORM: Prisma 7
 - Auth: Supabase Auth
 - Storage: Supabase Storage (bucket privato)
 - PDF: @react-pdf/renderer (server-side)
-- Styling: Tailwind CSS
+- Styling: Tailwind CSS v4
 - Hosting: Vercel
 - Email: Resend (da configurare)
 
