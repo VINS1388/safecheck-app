@@ -1,8 +1,8 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { salvaRisposta } from "@/lib/db/queries/risposte";
-import type { EsitoRisposta } from "@/types";
+import { salvaRisposta, salvaNominativi } from "@/lib/db/queries/risposte";
+import type { EsitoRisposta, Nominativi } from "@/types";
 
 export interface SalvaRispostaActionInput {
   visitaId: string;
@@ -10,6 +10,7 @@ export interface SalvaRispostaActionInput {
   sezioneId: string;
   valore: EsitoRisposta | null;
   azioneCorrettiva: string | null;
+  osservazioni: string | null;
 }
 
 export type SalvaRispostaResult = { ok: true } | { ok: false; error: string };
@@ -33,7 +34,27 @@ export async function salvaRispostaAction(
       sezioneId: input.sezioneId,
       valore: input.valore,
       azioneCorrettiva: input.azioneCorrettiva,
+      osservazioni: input.osservazioni,
     });
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Autosave dei nominativi delle figure di sicurezza (SEZ-01). */
+export async function salvaNominativiAction(
+  visitaId: string,
+  nominativi: Nominativi
+): Promise<SalvaRispostaResult> {
+  const { user } = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  }
+
+  try {
+    await salvaNominativi(visitaId, nominativi);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getVisitaById } from "@/lib/db/queries/visite";
-import { getRisposteByVisita } from "@/lib/db/queries/risposte";
+import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
 import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
 import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
 
@@ -76,6 +76,8 @@ export async function POST(
     visita: {
       id: visita.id,
       data_visita: visita.data_visita,
+      ora_inizio: visita.ora_inizio,
+      note_preliminari: visita.note_preliminari,
       note_finali_visita: visita.note_conclusive,
       numero_verbale: numeroVerbale,
     },
@@ -85,12 +87,21 @@ export async function POST(
       indirizzo: visita.sede_indirizzo,
       citta: visita.sede_citta,
     },
-    specialist: { nome_completo: visita.specialist_nome },
+    specialist: {
+      nome_completo: visita.specialist_nome,
+      qualifica: visita.qualifica_tecnico,
+    },
+    referente_cliente: visita.referente_cliente,
+    nominativi: estraiNominativi(risposte),
     template: visita.template_snapshot,
     risposte: Object.fromEntries(
       risposte.map((r) => [
         r.domanda_id,
-        { esito: r.valore, azione_correttiva: r.azione_correttiva },
+        {
+          esito: r.valore,
+          azione_correttiva: r.azione_correttiva,
+          osservazioni: r.osservazioni,
+        },
       ])
     ),
   };

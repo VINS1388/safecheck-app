@@ -12,6 +12,10 @@ export interface VisitaDettaglio {
   specialist_id: string;
   stato: StatoVisita;
   data_visita: string;
+  ora_inizio: string | null;
+  referente_cliente: string | null;
+  qualifica_tecnico: string | null;
+  note_preliminari: string | null;
   numero_verbale: string | null;
   note_conclusive: string | null;
   template_snapshot: TemplateSnapshot;
@@ -20,6 +24,15 @@ export interface VisitaDettaglio {
   sede_indirizzo: string;
   sede_citta: string;
   specialist_nome: string;
+}
+
+/** Dati raccolti nella schermata "Avvia sopralluogo". */
+export interface DatiAvvio {
+  data_visita: string;
+  ora_inizio: string | null;
+  referente_cliente: string;
+  qualifica_tecnico: string | null;
+  note_preliminari: string | null;
 }
 
 /** Riga sintetica per gli elenchi (lista visite, visite per cliente). */
@@ -39,6 +52,10 @@ interface VisitaConRelazioni {
   specialist_id: string;
   stato: StatoVisita;
   data_visita: string;
+  ora_inizio: string | null;
+  referente_cliente: string | null;
+  qualifica_tecnico: string | null;
+  note_preliminari: string | null;
   numero_verbale: string | null;
   note_conclusive: string | null;
   template_snapshot: TemplateSnapshot;
@@ -48,7 +65,19 @@ interface VisitaConRelazioni {
 }
 
 const SELECT_DETTAGLIO = `
-  id, cliente_id, sede_id, specialist_id, stato, data_visita, numero_verbale,
+  id, cliente_id, sede_id, specialist_id, stato, data_visita, ora_inizio,
+  referente_cliente, qualifica_tecnico, note_preliminari, numero_verbale,
+  note_conclusive, template_snapshot,
+  clienti ( ragione_sociale ),
+  sedi ( nome, indirizzo, citta ),
+  utenti ( nome_completo )
+`;
+
+// Variante senza le colonne della migration 006 (qualifica_tecnico,
+// note_preliminari): usata come fallback finché la 006 non è applicata.
+const SELECT_DETTAGLIO_SENZA_006 = `
+  id, cliente_id, sede_id, specialist_id, stato, data_visita, ora_inizio,
+  referente_cliente, numero_verbale,
   note_conclusive, template_snapshot,
   clienti ( ragione_sociale ),
   sedi ( nome, indirizzo, citta ),
@@ -110,11 +139,20 @@ export async function creaVisita(input: {
 export async function getVisitaById(id: string): Promise<VisitaDettaglio | null> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("visite")
     .select(SELECT_DETTAGLIO)
     .eq("id", id)
     .single();
+
+  // Fallback se la migration 006 non è ancora applicata (colonne assenti).
+  if (error) {
+    ({ data, error } = await supabase
+      .from("visite")
+      .select(SELECT_DETTAGLIO_SENZA_006)
+      .eq("id", id)
+      .single());
+  }
 
   if (error || !data) return null;
 
@@ -127,6 +165,10 @@ export async function getVisitaById(id: string): Promise<VisitaDettaglio | null>
     specialist_id: v.specialist_id,
     stato: v.stato,
     data_visita: v.data_visita,
+    ora_inizio: v.ora_inizio,
+    referente_cliente: v.referente_cliente,
+    qualifica_tecnico: v.qualifica_tecnico,
+    note_preliminari: v.note_preliminari,
     numero_verbale: v.numero_verbale,
     note_conclusive: v.note_conclusive,
     template_snapshot: v.template_snapshot,
@@ -136,6 +178,42 @@ export async function getVisitaById(id: string): Promise<VisitaDettaglio | null>
     sede_citta: v.sedi?.citta ?? "",
     specialist_nome: v.utenti?.nome_completo ?? "—",
   };
+}
+
+/** Salva i dati della schermata "Avvia sopralluogo" sulla visita. */
+export async function aggiornaDatiAvvio(
+  visitaId: string,
+  dati: DatiAvvio
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("visite")
+    .update({
+      data_visita: dati.data_visita,
+      ora_inizio: dati.ora_inizio,
+      referente_cliente: dati.referente_cliente,
+      qualifica_tecnico: dati.qualifica_tecnico,
+      note_preliminari: dati.note_preliminari,
+    })
+    .eq("id", visitaId);
+
+  if (!error) return;
+
+  // Fallback se la migration 006 non è ancora applicata: salva solo i campi
+  // su colonne preesistenti (qualifica/note_preliminari richiedono la 006).
+  const { error: errBase } = await supabase
+    .from("visite")
+    .update({
+      data_visita: dati.data_visita,
+      ora_inizio: dati.ora_inizio,
+      referente_cliente: dati.referente_cliente,
+    })
+    .eq("id", visitaId);
+
+  if (errBase) {
+    throw new Error(`Errore salvataggio dati avvio: ${errBase.message}`);
+  }
 }
 
 /** Elenco visite di un cliente, ordinate per data decrescente. */

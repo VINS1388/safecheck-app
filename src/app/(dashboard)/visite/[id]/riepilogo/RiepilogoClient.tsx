@@ -76,8 +76,44 @@ export default function RiepilogoClient({
 
   return (
     <div className="space-y-6">
-      {/* Conteggi per sezione */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {/* Conteggi per sezione — card stack su mobile */}
+      <div className="space-y-3 sm:hidden">
+        {conteggi.map((c) => {
+          const haNC = c.NC > 0;
+          const haMancanti = c.obbligatorieSenzaRisposta > 0;
+          return (
+            <div
+              key={c.id}
+              className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-gray-900">
+                  {c.id}
+                  <span className="ml-1 font-normal text-gray-500">{c.nome}</span>
+                </p>
+                {haMancanti ? (
+                  <Badge colore="red">Incompleta</Badge>
+                ) : haNC ? (
+                  <Badge colore="amber">NC</Badge>
+                ) : (
+                  <Badge colore="green">OK</Badge>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                <span>C: {c.C}</span>
+                <span className="text-amber-600">PC: {c.PC}</span>
+                <span className="text-red-600">NC: {c.NC}</span>
+                <span>NV: {c.NV}</span>
+                <span>NA: {c.NA}</span>
+                <span className="text-gray-400">n.r.: {c.nonRisposto}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Conteggi per sezione — tabella su desktop */}
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -195,10 +231,10 @@ export default function RiepilogoClient({
       )}
 
       {/* Azioni */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href={`/visite/${visitaId}/checklist`}
-          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          className="flex min-h-[48px] items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
         >
           {chiusa ? "Apri checklist (sola lettura)" : "Torna alla checklist"}
         </Link>
@@ -206,7 +242,7 @@ export default function RiepilogoClient({
         {chiusa ? (
           <a
             href={`/api/visite/${visitaId}/download-pdf`}
-            className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="flex min-h-[48px] items-center justify-center rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
           >
             Scarica PDF
           </a>
@@ -215,7 +251,7 @@ export default function RiepilogoClient({
             type="button"
             disabled={bloccato || generando}
             onClick={generaPdf}
-            className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-[48px] rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {generando ? "Generazione verbale in corso…" : "Genera verbale PDF"}
           </button>

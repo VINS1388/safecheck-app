@@ -1,21 +1,27 @@
 import PDFDocument from "pdfkit";
-import type { EsitoRisposta, TemplateSnapshot } from "@/types";
+import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
+import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI } from "@/types";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
   azione_correttiva: string | null;
+  osservazioni: string | null;
 }
 
 export interface VerbaleData {
   visita: {
     id: string;
     data_visita: string;
+    ora_inizio: string | null;
+    note_preliminari: string | null;
     note_finali_visita: string | null;
     numero_verbale: string;
   };
   cliente: { ragione_sociale: string };
   sede: { nome: string; indirizzo: string; citta: string };
-  specialist: { nome_completo: string };
+  specialist: { nome_completo: string; qualifica: string | null };
+  referente_cliente: string | null;
+  nominativi: Nominativi;
   template: TemplateSnapshot;
   risposte: Record<string, VerbaleRisposta>;
 }
@@ -132,11 +138,19 @@ function renderCopertina(doc: Doc, dati: VerbaleData): void {
   riga(doc);
   doc.moveDown(1);
 
+  const specialist = dati.specialist.qualifica
+    ? `${dati.specialist.nome_completo} (${dati.specialist.qualifica})`
+    : dati.specialist.nome_completo;
+  const dataOra = dati.visita.ora_inizio
+    ? `${formatData(dati.visita.data_visita)} · ore ${dati.visita.ora_inizio.slice(0, 5)}`
+    : formatData(dati.visita.data_visita);
+
   const campi: [string, string][] = [
-    ["Data sopralluogo", formatData(dati.visita.data_visita)],
+    ["Data sopralluogo", dataOra],
     ["Azienda", dati.cliente.ragione_sociale],
     ["Sede", `${dati.sede.nome} — ${dati.sede.indirizzo}, ${dati.sede.citta}`],
-    ["Specialist", dati.specialist.nome_completo],
+    ["Specialist", specialist],
+    ["Referente cliente", dati.referente_cliente ?? "—"],
   ];
 
   for (const [label, valore] of campi) {
@@ -149,8 +163,55 @@ function renderCopertina(doc: Doc, dati: VerbaleData): void {
     doc.moveDown(0.8);
   }
 
+  const notePrelim = dati.visita.note_preliminari?.trim();
+  if (notePrelim) {
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(GRIGIO).text("Note preliminari");
+    doc
+      .font("Helvetica")
+      .fontSize(11)
+      .fillColor(NERO)
+      .text(notePrelim, { width: larghezzaContenuto(doc) });
+    doc.moveDown(0.8);
+  }
+
   doc.moveDown(0.5);
   riga(doc);
+}
+
+// ── Nominativi figure sicurezza (SEZ-01) ─────────────────────────────────
+function renderNominativi(doc: Doc, nominativi: Nominativi): void {
+  const righe = FIGURE_SICUREZZA.map((f) => {
+    const v = nominativi[f.key];
+    const testo = Array.isArray(v) ? v.join(", ") : (v ?? "");
+    return [f.label, testo.trim()] as [string, string];
+  }).filter(([, testo]) => testo.length > 0);
+
+  doc
+    .fillColor(NERO)
+    .font("Helvetica-Bold")
+    .fontSize(11)
+    .text("Nominativi figure della sicurezza");
+  doc.moveDown(0.3);
+
+  if (righe.length === 0) {
+    doc
+      .font("Helvetica-Oblique")
+      .fontSize(9.5)
+      .fillColor(GRIGIO)
+      .text("Nessun nominativo indicato.");
+  } else {
+    for (const [label, testo] of righe) {
+      assicuraSpazio(doc, 16);
+      doc.font("Helvetica-Bold").fontSize(9.5).fillColor(GRIGIO).text(`${label}: `, {
+        continued: true,
+      });
+      doc.font("Helvetica").fontSize(9.5).fillColor(NERO).text(testo);
+    }
+  }
+
+  doc.moveDown(0.6);
+  rigaSottile(doc);
+  doc.moveDown(0.6);
 }
 
 // ── Sezioni ──────────────────────────────────────────────────────────────
@@ -173,6 +234,11 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
         .text(sez.descrizione, { width: larghezzaContenuto(doc) });
     }
     doc.moveDown(0.8);
+
+    // SEZ-01: nominativi figure sicurezza prima delle domande
+    if (sez.id === SEZIONE_NOMINATIVI) {
+      renderNominativi(doc, dati.nominativi);
+    }
 
     const domande = [...sez.domande].sort((a, b) => a.ordine - b.ordine);
     for (const d of domande) {
@@ -204,6 +270,18 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
           .fontSize(9.5)
           .fillColor(GRIGIO)
           .text(`Azione correttiva: ${r.azione_correttiva}`, {
+            width: larghezzaContenuto(doc),
+          });
+      }
+
+      // Motivazione per NV / NA
+      if ((esito === "NV" || esito === "NA") && r?.osservazioni) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Motivazione: ${r.osservazioni}`, {
             width: larghezzaContenuto(doc),
           });
       }

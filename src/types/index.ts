@@ -1,8 +1,7 @@
 // Tipi TypeScript globali per SafeCheck.
 
-import type { EsitoRisposta } from "./verbale";
-
-export type { EsitoRisposta };
+/** Esito di una risposta della checklist. */
+export type EsitoRisposta = "C" | "PC" | "NC" | "NV" | "NA";
 
 /**
  * Campo extra (nominativi) associato ad alcune domande di SEZ-01.
@@ -46,3 +45,33 @@ export interface TemplateSnapshot {
   origine?: unknown;
   sezioni: SezioneTemplate[];
 }
+
+// ── Figure della sicurezza (SEZ-01 — nominativi) ─────────────────────────
+
+export interface FiguraSicurezza {
+  key: string;
+  label: string;
+  multiplo: boolean; // true = più nomi (multi-tag), false = nome singolo
+}
+
+/** Le 9 figure della sicurezza nominate in SEZ-01 (ordine gerarchico). */
+export const FIGURE_SICUREZZA: FiguraSicurezza[] = [
+  { key: "DL", label: "DL — Datore di Lavoro", multiplo: false },
+  { key: "RSPP", label: "RSPP — Resp. Servizio Prevenzione e Protezione", multiplo: false },
+  { key: "ASPP", label: "ASPP — Addetto al Servizio di Prevenzione e Protezione", multiplo: true },
+  { key: "MC", label: "MC — Medico Competente", multiplo: true },
+  { key: "RLS", label: "RLS — Rappresentante dei Lavoratori per la Sicurezza", multiplo: true },
+  { key: "ANTINCENDIO", label: "Addetti Antincendio", multiplo: true },
+  { key: "PRIMO_SOCCORSO", label: "Addetti Primo Soccorso", multiplo: true },
+  { key: "PREPOSTI", label: "Preposti", multiplo: true },
+  { key: "DIRIGENTI", label: "Dirigenti", multiplo: true },
+];
+
+/** Mappa figura → nome (singolo) o lista nomi (multiplo). */
+export type Nominativi = Record<string, string | string[]>;
+
+/** Id della "domanda" fittizia che archivia i nominativi di SEZ-01. */
+export const DOMANDA_NOMINATIVI = "SEZ-01-NOMINATIVI";
+
+/** Id della sezione organizzazione/figure sicurezza. */
+export const SEZIONE_NOMINATIVI = "SEZ-01";

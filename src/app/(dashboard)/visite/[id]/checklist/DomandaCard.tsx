@@ -18,39 +18,44 @@ const STILE_SELEZIONATO: Record<EsitoRisposta, string> = {
   C: "border-green-600 bg-green-600 text-white",
   PC: "border-amber-500 bg-amber-500 text-white",
   NC: "border-red-600 bg-red-600 text-white",
-  NV: "border-slate-500 bg-slate-500 text-white",
-  NA: "border-slate-400 bg-slate-400 text-white",
+  NV: "border-gray-500 bg-gray-500 text-white",
+  NA: "border-gray-400 bg-gray-400 text-white",
 };
 
 export interface DomandaCardProps {
   domanda: DomandaTemplate;
   valore: EsitoRisposta | null;
   azioneCorrettiva: string;
+  osservazioni: string;
+  disabled?: boolean;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
+  onMotivazione: (testo: string) => void;
 }
 
 export default function DomandaCard({
   domanda,
   valore,
   azioneCorrettiva,
+  osservazioni,
+  disabled,
   onValore,
   onAzione,
+  onMotivazione,
 }: DomandaCardProps) {
   const mostraAzione = valore === "NC" || valore === "PC";
+  const mostraMotivazione = valore === "NV" || valore === "NA";
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-2">
-        <p className="flex-1 text-sm font-medium text-gray-900">
-          {domanda.testo}
-          {domanda.obbligatoria && (
-            <span className="ml-1 text-red-500" title="Obbligatoria">
-              *
-            </span>
-          )}
-        </p>
-      </div>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium leading-snug text-gray-900">
+        {domanda.testo}
+        {domanda.obbligatoria && (
+          <span className="ml-1 text-red-500" title="Obbligatoria">
+            *
+          </span>
+        )}
+      </p>
 
       {domanda.note_tecnico && (
         <p className="mt-1 text-xs leading-relaxed text-gray-500">
@@ -58,23 +63,31 @@ export default function DomandaCard({
         </p>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {VALORI.map((v) => {
           const selezionato = valore === v;
           return (
             <button
               key={v}
               type="button"
+              disabled={disabled}
               onClick={() => onValore(v)}
-              title={ETICHETTE[v]}
               className={cn(
-                "min-w-[3rem] rounded-md border px-3 py-1.5 text-sm font-semibold transition",
+                "flex min-h-[48px] flex-col items-center justify-center rounded-lg border px-2 py-1.5 text-center font-semibold leading-tight transition disabled:opacity-50",
                 selezionato
                   ? STILE_SELEZIONATO[v]
                   : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
               )}
             >
-              {v}
+              <span className="text-base font-bold">{v}</span>
+              <span
+                className={cn(
+                  "text-[10px] font-medium",
+                  selezionato ? "text-white/90" : "text-gray-500"
+                )}
+              >
+                {ETICHETTE[v]}
+              </span>
             </button>
           );
         })}
@@ -88,9 +101,30 @@ export default function DomandaCard({
           <textarea
             value={azioneCorrettiva}
             onChange={(e) => onAzione(e.target.value)}
+            disabled={disabled}
             rows={2}
             placeholder={domanda.correzione_default || undefined}
-            className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+            className="mt-1 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
+          />
+        </div>
+      )}
+
+      {mostraMotivazione && (
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-gray-700">
+            Motivazione <span className="font-normal text-gray-400">(opzionale)</span>
+          </label>
+          <textarea
+            value={osservazioni}
+            onChange={(e) => onMotivazione(e.target.value)}
+            disabled={disabled}
+            rows={2}
+            placeholder={
+              valore === "NA"
+                ? "Perché non applicabile?"
+                : "Perché non verificato?"
+            }
+            className="mt-1 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
           />
         </div>
       )}

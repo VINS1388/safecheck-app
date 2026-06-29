@@ -5,8 +5,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { creaVisita } from "@/lib/db/queries/visite";
 
 /**
- * Crea una nuova visita in bozza per la sede e reindirizza alla checklist.
- * Da usare in un <form> della scheda sede:
+ * Crea una nuova visita in bozza per la sede e reindirizza alla schermata
+ * di avvio sopralluogo. Da usare in un <form> della scheda sede:
  *   <form action={nuovaVisitaAction.bind(null, clienteId, sedeId)}>
  */
 export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
@@ -21,5 +21,5 @@ export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
     specialistId: user.id,
   });
 
-  redirect(`/visite/${visitaId}/checklist`);
+  redirect(`/visite/${visitaId}/avvia`);
 }
