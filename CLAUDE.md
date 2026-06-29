@@ -72,6 +72,9 @@ Sostituisce workflow Excel con app cloud multi-utente.
 - Non esporre URL pubblici per i PDF
 - Non sovrascrivere versioni template esistenti
 - Non modificare sopralluoghi in stato chiuso o sostituito
+- NON aggiungere "use client" ai componenti in src/components/pdf/
+  I componenti @react-pdf/renderer devono essere server-only.
+  "use client" rompe renderToBuffer() su Next.js 16.
 
 ## Riferimenti
 - Prototipo HTML: F:\StudioBilello\2026\safecheck\app\index.html
