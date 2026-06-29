@@ -49,3 +49,6 @@ next-env.d.ts
 
 # PDF di test generati durante lo spike
 /test-verbale.pdf
+
+# Supabase CLI
+/supabase/.temp/
