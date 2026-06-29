@@ -4,10 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita } from "@/lib/db/queries/risposte";
-import {
-  BUCKET_VERBALI,
-  prossimoNumeroVerbale,
-} from "@/lib/db/queries/verbali";
+import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
 import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
 
 export const runtime = "nodejs";
@@ -59,9 +56,20 @@ export async function POST(
     );
   }
 
-  // 5. Numero verbale SC-YYYY-NNNN
-  const anno = new Date().getFullYear();
-  const numeroVerbale = await prossimoNumeroVerbale(anno);
+  // 5. Numero verbale SC-YYYY-NNNN — RPC atomica (SECURITY DEFINER):
+  //    assegna e persiste `numero_verbale` sulla visita in un'unica operazione.
+  const { data: numeroVerbale, error: numErr } = await supabase.rpc(
+    "assegna_numero_verbale",
+    { p_visita_id: visita.id }
+  );
+  if (numErr || !numeroVerbale) {
+    return NextResponse.json(
+      {
+        error: `Numerazione verbale fallita: ${numErr?.message ?? "nessun numero assegnato"}`,
+      },
+      { status: 500 }
+    );
+  }
 
   // 6. Dati per il PDF
   const dati: VerbaleData = {
@@ -123,12 +131,11 @@ export async function POST(
       throw new Error(`Inserimento verbali_pdf fallito: ${insErr.message}`);
     }
 
-    // 11. Chiusura verbale: numero + stati + timestamp
+    // 11. Chiusura verbale: stati + timestamp (numero già assegnato dalla RPC)
     const ora = new Date().toISOString();
     const { error: updErr } = await admin
       .from("visite")
       .update({
-        numero_verbale: numeroVerbale,
         stato: "verbale_generato",
         stato_verbale: "chiuso",
         completata_il: ora,
@@ -148,10 +155,12 @@ export async function POST(
       visita_id: visita.id,
     });
   } catch (e) {
-    // Rollback: rimuovi il file caricato
+    // Rollback: rimuovi il file caricato e libera il numero già assegnato dalla
+    // RPC (la visita non è stata chiusa), così un nuovo tentativo riparte pulito.
     if (uploaded) {
       await admin.storage.from(BUCKET_VERBALI).remove([storagePath]);
     }
+    await admin.from("visite").update({ numero_verbale: null }).eq("id", visita.id);
     const msg = e instanceof Error ? e.message : "Errore generazione verbale.";
     console.error("genera-pdf:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
