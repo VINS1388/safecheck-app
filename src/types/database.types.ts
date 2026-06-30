@@ -790,6 +790,10 @@ export type Database = {
         Args: { p_anno?: number; p_visita_id: string }
         Returns: string
       }
+      clona_visita: {
+        Args: { p_source_id: string; p_sostitutivo: boolean }
+        Returns: string
+      }
       dashboard_kpi: {
         Args: never
         Returns: {

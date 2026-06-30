@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getVisitaById } from "@/lib/db/queries/visite";
+import { getVisitaById, getVerbaliRefByIds } from "@/lib/db/queries/visite";
 import { getRisposteByVisita } from "@/lib/db/queries/risposte";
 import {
   getImpreseByVisita,
@@ -40,6 +40,20 @@ export default async function RiepilogoPage({
   if (!visita) {
     notFound();
   }
+
+  // Genealogia: risolvi i numeri verbale dei verbali collegati (per i link).
+  const refs = await getVerbaliRefByIds(
+    [visita.derivato_da, visita.sostituisce, visita.sostituito_da].filter(
+      (x): x is string => Boolean(x)
+    )
+  );
+  const link = (vid: string | null) =>
+    vid ? { id: vid, numero: refs.get(vid)?.numero_verbale ?? null } : null;
+  const genealogia = {
+    derivatoDa: link(visita.derivato_da),
+    sostituisce: link(visita.sostituisce),
+    sostituitoDa: link(visita.sostituito_da),
+  };
 
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
@@ -148,10 +162,12 @@ export default async function RiepilogoPage({
       <RiepilogoClient
         visitaId={id}
         stato={visita.stato}
+        statoVerbale={visita.stato_verbale}
         numeroVerbale={visita.numero_verbale}
         conteggi={conteggi}
         totali={totali}
         noteIniziali={visita.note_conclusive ?? ""}
+        genealogia={genealogia}
       />
     </div>
   );

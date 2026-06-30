@@ -14,35 +14,83 @@ interface Totali {
   obbligatorieSenzaRisposta: number;
 }
 
+interface VerbaleLink {
+  id: string;
+  numero: string | null;
+}
+
+interface Genealogia {
+  derivatoDa: VerbaleLink | null;
+  sostituisce: VerbaleLink | null;
+  sostituitoDa: VerbaleLink | null;
+}
+
 interface Props {
   visitaId: string;
   stato: string;
+  statoVerbale: "bozza" | "chiuso" | "sostituito" | null;
   numeroVerbale: string | null;
   conteggi: ConteggiSezione[];
   totali: Totali;
   noteIniziali: string;
+  genealogia: Genealogia;
 }
 
 type Stato = "idle" | "saving" | "saved" | "error";
 
+/** Link a un verbale collegato (genealogia): mostra il numero o "bozza". */
+function GenLink({ l }: { l: VerbaleLink }) {
+  return (
+    <Link
+      href={`/visite/${l.id}/riepilogo`}
+      className="font-semibold text-[#1e3a5f] hover:underline"
+    >
+      {l.numero ?? "verbale in bozza"}
+    </Link>
+  );
+}
+
 export default function RiepilogoClient({
   visitaId,
   stato,
+  statoVerbale,
   numeroVerbale,
   conteggi,
   totali,
   noteIniziali,
+  genealogia,
 }: Props) {
   const router = useRouter();
   const [note, setNote] = useState(noteIniziali);
   const [statoNote, setStatoNote] = useState<Stato>("idle");
   const [generando, setGenerando] = useState(false);
   const [erroreGen, setErroreGen] = useState<string | null>(null);
+  const [azione, setAzione] = useState<null | "duplica" | "sostitutivo">(null);
+  const [erroreAzione, setErroreAzione] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chiusa = stato !== "bozza";
+  const isChiuso = statoVerbale === "chiuso";
+  const isSostituito = statoVerbale === "sostituito";
   const bloccato =
     totali.obbligatorieSenzaRisposta > 0 || totali.campoMancante > 0;
+
+  /** Esegue Duplica o Crea sostitutivo e naviga al nuovo verbale (bozza). */
+  async function eseguiClone(tipo: "duplica" | "sostitutivo") {
+    setAzione(tipo);
+    setErroreAzione(null);
+    try {
+      const res = await fetch(`/api/visite/${visitaId}/${tipo}`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error ?? "Operazione non riuscita.");
+      }
+      router.push(`/visite/${body.visita_id}/checklist`);
+    } catch (e) {
+      setErroreAzione(e instanceof Error ? e.message : "Operazione non riuscita.");
+      setAzione(null);
+    }
+  }
 
   function handleNote(testo: string) {
     setNote(testo);
@@ -78,6 +126,44 @@ export default function RiepilogoClient({
 
   return (
     <div className="space-y-6">
+      {/* Avviso sostituito — priorità visiva alta (validità del verbale) */}
+      {isSostituito && genealogia.sostituitoDa && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Verbale sostituito — non più valido</p>
+          <p className="mt-0.5">
+            Questo verbale è stato sostituito da{" "}
+            <Link
+              href={`/visite/${genealogia.sostituitoDa.id}/riepilogo`}
+              className="font-semibold underline"
+            >
+              {genealogia.sostituitoDa.numero ?? "verbale in bozza"}
+            </Link>
+            . Resta consultabile e scaricabile in sola lettura.
+          </p>
+        </div>
+      )}
+
+      {/* Genealogia (provenienza) — solo quando esiste */}
+      {(genealogia.derivatoDa || genealogia.sostituisce) && (
+        <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Genealogia
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {genealogia.derivatoDa && (
+              <li>
+                Duplicato da <GenLink l={genealogia.derivatoDa} />
+              </li>
+            )}
+            {genealogia.sostituisce && (
+              <li>
+                Sostituisce <GenLink l={genealogia.sostituisce} />
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {/* Conteggi per sezione — card stack su mobile */}
       <div className="space-y-3 sm:hidden">
         {conteggi.map((c) => {
@@ -239,6 +325,43 @@ export default function RiepilogoClient({
       {erroreGen && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {erroreGen}
+        </div>
+      )}
+
+      {/* Azioni verbale chiuso: Duplica / Crea sostitutivo */}
+      {isChiuso && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-sm font-semibold text-gray-900">Azioni sul verbale</p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              disabled={azione !== null}
+              onClick={() => eseguiClone("duplica")}
+              className="min-h-[44px] flex-1 rounded-lg border border-[#1e3a5f] px-4 text-sm font-semibold text-[#1e3a5f] transition hover:bg-[#1e3a5f] hover:text-white disabled:opacity-40"
+            >
+              {azione === "duplica" ? "Duplicazione…" : "Duplica"}
+            </button>
+            <button
+              type="button"
+              disabled={azione !== null || Boolean(genealogia.sostituitoDa)}
+              onClick={() => eseguiClone("sostitutivo")}
+              title={
+                genealogia.sostituitoDa
+                  ? `Già sostituito da ${genealogia.sostituitoDa.numero ?? "un altro verbale"}`
+                  : undefined
+              }
+              className="min-h-[44px] flex-1 rounded-lg border border-amber-500 px-4 text-sm font-semibold text-amber-700 transition hover:bg-amber-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {azione === "sostitutivo" ? "Creazione…" : "Crea sostitutivo"}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            Duplica crea una copia indipendente. Crea sostitutivo annulla questo
+            verbale sostituendolo con uno nuovo (un solo sostitutivo per verbale).
+          </p>
+          {erroreAzione && (
+            <p className="mt-2 text-sm text-red-700">{erroreAzione}</p>
+          )}
         </div>
       )}
 

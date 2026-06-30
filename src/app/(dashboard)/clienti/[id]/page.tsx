@@ -255,6 +255,16 @@ export default async function ClienteDettaglioPage({
 }
 
 function BadgeVerbale({ v }: { v: VisitaRiepilogo }) {
+  if (v.stato_verbale === "sostituito") {
+    return (
+      <span
+        className="inline-block rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-500"
+        title="Verbale sostituito — non più valido"
+      >
+        {v.numero_verbale} · Sostituito
+      </span>
+    );
+  }
   if (v.numero_verbale != null) {
     return (
       <span className="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
@@ -270,14 +280,24 @@ function BadgeVerbale({ v }: { v: VisitaRiepilogo }) {
 }
 
 function AzioniVerbale({ v }: { v: VisitaRiepilogo }) {
+  // Verbale numerato (chiuso o sostituito): Leggi (riepilogo, da cui Duplica/
+  // Sostitutivo) + Scarica PDF. Bozza: Continua.
   if (v.numero_verbale != null) {
     return (
-      <a
-        href={`/api/visite/${v.id}/download-pdf`}
-        className="font-medium text-[#1e3a5f] hover:underline"
-      >
-        Scarica PDF
-      </a>
+      <span className="inline-flex items-center gap-4">
+        <Link
+          href={`/visite/${v.id}/riepilogo`}
+          className="font-medium text-[#1e3a5f] hover:underline"
+        >
+          Leggi
+        </Link>
+        <a
+          href={`/api/visite/${v.id}/download-pdf`}
+          className="font-medium text-[#1e3a5f] hover:underline"
+        >
+          Scarica PDF
+        </a>
+      </span>
     );
   }
   return (
