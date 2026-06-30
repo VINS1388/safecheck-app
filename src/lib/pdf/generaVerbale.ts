@@ -12,7 +12,7 @@ import {
   ETICHETTE_TIPO_IMPRESA,
   idRispostaFormazione,
 } from "@/types";
-import { sezioneCollassata } from "@/lib/checklist/completa";
+import { sezioneCollassata, domandaGateAttiva } from "@/lib/checklist/completa";
 import { normalizzaNominativi } from "@/lib/nominativi";
 
 export interface VerbaleRisposta {
@@ -290,7 +290,10 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
       .filter((d) => !soloFiltro || d.id === sez.domanda_filtro)
       // Formazione per-nominativo: le domande mappate a una figura sono stampate
       // per nominativo sotto; qui restano solo le generiche (Lavoratori, DL-SPP).
-      .filter((d) => !sez.formazione_per_nominativo || !d.figura_nominativo);
+      .filter((d) => !sez.formazione_per_nominativo || !d.figura_nominativo)
+      // Gate condizionale: omette le sotto-domande non attive (es. sorveglianza
+      // sanitaria se la filtro D-01-012 è NA/NV).
+      .filter((d) => !d.gated_by || domandaGateAttiva(d, dati.risposte[d.gated_by]?.esito ?? null));
     for (const d of domande) {
       assicuraSpazio(doc, 70);
 
@@ -365,6 +368,16 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
           .text(`Motivazione: ${r.osservazioni}`, {
             width: larghezzaContenuto(doc),
           });
+      }
+
+      // Campo data (es. sopralluogo annuale MC, D-01-016).
+      if (d.campo_data && r?.data_verifica) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Data: ${formatData(r.data_verifica)}`);
       }
 
       doc.moveDown(0.5);
@@ -638,6 +651,8 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
     } else {
       for (const d of sez.domande) {
         if (collassata && d.id !== sez.domanda_filtro) continue;
+        // Sotto-domanda gate non attiva: non conteggiata (es. sorveglianza NA/NV).
+        if (d.gated_by && !domandaGateAttiva(d, dati.risposte[d.gated_by]?.esito ?? null)) continue;
         const esito = dati.risposte[d.id]?.esito;
         if (esito) conteggi[esito] += 1;
       }

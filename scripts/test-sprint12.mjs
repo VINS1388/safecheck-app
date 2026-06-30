@@ -129,8 +129,7 @@ console.log("\n── SCENARIO D — rename nominativo, risposta per id sopravvi
   const nomId = "p1";
   const cid = idRispostaFormazione(qP, nomId);
   const risposteFormazione = { [cid]: { esito: "NC", azione: "Pianificare corso.", osservazione: "", dataVerifica: "" } };
-  // rename: stesso id, nome diverso
-  const prima = [{ id: nomId, nome: "TIzio Sempronio" }];
+  // rename: stesso id, nome diverso (refuso "TIzio" → "Tizio")
   const dopo = [{ id: nomId, nome: "Tizio Sempronio" }];
   const cidDopo = idRispostaFormazione(qP, dopo[0].id);
   check("composite id invariato dopo rename", cidDopo === cid);

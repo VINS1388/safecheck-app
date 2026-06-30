@@ -72,6 +72,35 @@ export function domandaAttiva(
   return domandaId === sezione.domanda_filtro;
 }
 
+// ── Gate condizionale a livello di DOMANDA (Sprint 12.1) ───────────────────
+//
+// Una domanda con `gated_by` è una sotto-domanda condizionale: è attiva
+// (visibile, richiesta, stampata) solo se la risposta alla domanda gate NON è
+// tra i valori in `gate_collassa_su`. Se la gate non è ancora risposta, la
+// sotto-domanda resta nascosta (la sotto-sezione "appare" solo quando attivata).
+// Le domande senza `gated_by` sono sempre attive. Meccanismo additivo,
+// indipendente dal collasso di sezione di SEZ-08.
+
+/** Forma minima di domanda su cui ragiona il gate. */
+export interface DomandaGate {
+  gated_by?: string;
+  gate_collassa_su?: string[];
+}
+
+/**
+ * True se la domanda è attiva dato il valore corrente della sua domanda gate.
+ * @param valoreGate  esito attuale della domanda `gated_by` (null se non risposta)
+ */
+export function domandaGateAttiva(
+  domanda: DomandaGate,
+  valoreGate: EsitoRisposta | null | undefined
+): boolean {
+  if (!domanda.gated_by) return true;
+  if (valoreGate == null) return false; // gate non risposta → sotto-domanda nascosta
+  const collassa = domanda.gate_collassa_su ?? [VALORE_FILTRO_COLLASSO];
+  return !collassa.includes(valoreGate);
+}
+
 // ── Completezza modello multi-impresa SEZ-08 (Sprint 9.1) ──────────────────
 //
 // Quando SEZ-08 è espansa e multi_impresa, le domande successive alla filtro

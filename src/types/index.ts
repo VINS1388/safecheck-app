@@ -32,6 +32,16 @@ export interface DomandaTemplate {
   // nominativo della figura SEZ-01 indicata (es. "PREPOSTI"). Le domande senza
   // figura_nominativo (Lavoratori, DL-SPP) restano singole generiche.
   figura_nominativo?: string;
+  // Gate condizionale a livello di domanda (Sprint 12.1): la domanda è visibile/
+  // richiesta solo se la risposta alla domanda `gated_by` NON è in
+  // `gate_collassa_su`. Usato per la sotto-sezione "Sorveglianza sanitaria" di
+  // SEZ-01 (gated_by D-01-012, collassa su NA/NV). Additivo, non tocca il motore
+  // di collasso di sezione di SEZ-08.
+  gated_by?: string;
+  gate_collassa_su?: string[];
+  // Mostra un campo data strutturato (es. data ultimo sopralluogo MC). Solo
+  // dato, persistito su risposte.campo_extra.data_verifica; nessun calcolo scadenze.
+  campo_data?: boolean;
   campo_extra?: CampoExtraTemplate;
 }
 

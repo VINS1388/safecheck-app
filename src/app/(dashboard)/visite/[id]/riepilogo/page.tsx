@@ -9,6 +9,7 @@ import {
 import {
   richiedeTesto,
   sezioneCollassata,
+  domandaGateAttiva,
   completezzaImpreseSezioneOtto,
   completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
@@ -100,6 +101,15 @@ export default async function RiepilogoPage({
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
       // Formazione: le domande mappate a una figura sono aggregate sotto, per nominativo.
       if (formazione && d.figura_nominativo) continue;
+      // Gate condizionale (es. sorveglianza sanitaria): salta se non attiva.
+      if (
+        d.gated_by &&
+        !domandaGateAttiva(
+          d,
+          (rispostaPer.get(d.gated_by)?.valore ?? null) as EsitoRisposta | null
+        )
+      )
+        continue;
       const r = rispostaPer.get(d.id);
       const v = (r?.valore ?? null) as EsitoRisposta | null;
       if (v === null) {

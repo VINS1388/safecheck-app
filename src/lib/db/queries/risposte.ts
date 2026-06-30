@@ -22,6 +22,9 @@ export interface SalvaRispostaInput {
   azioneCorrettiva: string | null;
   osservazioneEvidenza?: string | null;
   osservazioni?: string | null;
+  // Campo data opzionale (es. sopralluogo MC, D-01-016): persistito su
+  // campo_extra.data_verifica. `undefined` = non gestire campo_extra.
+  dataVerifica?: string | null;
 }
 
 /**
@@ -31,21 +34,24 @@ export interface SalvaRispostaInput {
 export async function salvaRisposta(input: SalvaRispostaInput): Promise<void> {
   const supabase = await createClient();
 
+  const row: Record<string, unknown> = {
+    visita_id: input.visitaId,
+    domanda_id: input.domandaId,
+    sezione_id: input.sezioneId,
+    valore: input.valore,
+    azione_correttiva: input.azioneCorrettiva,
+    osservazione_evidenza: input.osservazioneEvidenza ?? null,
+    osservazioni: input.osservazioni ?? null,
+    aggiornata_il: new Date().toISOString(),
+  };
+  // Solo per le domande con campo data: scrive/azzera campo_extra.data_verifica.
+  if (input.dataVerifica !== undefined) {
+    row.campo_extra = input.dataVerifica ? { data_verifica: input.dataVerifica } : {};
+  }
+
   const { error } = await supabase
     .from("risposte")
-    .upsert(
-      {
-        visita_id: input.visitaId,
-        domanda_id: input.domandaId,
-        sezione_id: input.sezioneId,
-        valore: input.valore,
-        azione_correttiva: input.azioneCorrettiva,
-        osservazione_evidenza: input.osservazioneEvidenza ?? null,
-        osservazioni: input.osservazioni ?? null,
-        aggiornata_il: new Date().toISOString(),
-      },
-      { onConflict: "visita_id,domanda_id" }
-    );
+    .upsert(row, { onConflict: "visita_id,domanda_id" });
 
   if (error) {
     throw new Error(`Errore salvataggio risposta: ${error.message}`);

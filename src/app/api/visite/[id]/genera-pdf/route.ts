@@ -12,6 +12,7 @@ import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
 import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
 import {
   sezioneCollassata,
+  domandaGateAttiva,
   completezzaImpreseSezioneOtto,
   completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
@@ -77,6 +78,8 @@ export async function POST(
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
       // Formazione: le domande mappate a una figura sono validate sotto per nominativo.
       if (formazione && d.figura_nominativo) continue;
+      // Gate condizionale (es. sorveglianza sanitaria): salta se non attiva.
+      if (d.gated_by && !domandaGateAttiva(d, rispostaPer.get(d.gated_by)?.valore ?? null)) continue;
       const r = rispostaPer.get(d.id);
       const v = r?.valore ?? null;
       if (!v) {

@@ -27,6 +27,7 @@ export interface SalvaRispostaActionInput {
   azioneCorrettiva: string | null;
   osservazioneEvidenza: string | null;
   osservazioni: string | null;
+  dataVerifica?: string | null;
 }
 
 export type SalvaRispostaResult = { ok: true } | { ok: false; error: string };
@@ -52,6 +53,7 @@ export async function salvaRispostaAction(
       azioneCorrettiva: input.azioneCorrettiva,
       osservazioneEvidenza: input.osservazioneEvidenza,
       osservazioni: input.osservazioni,
+      dataVerifica: input.dataVerifica,
     });
     return { ok: true };
   } catch (e) {

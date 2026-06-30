@@ -17,6 +17,7 @@ import {
   rispostaCompleta,
   sezioneCollassata,
   domandaAttiva,
+  domandaGateAttiva,
   completezzaImpreseSezioneOtto,
   completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
@@ -46,6 +47,7 @@ interface Entry {
   azione: string;
   osservazioneEvidenza: string;
   osservazioni: string;
+  dataVerifica: string; // campo data opzionale (D-01-016) → campo_extra.data_verifica
   sezioneId: string;
 }
 
@@ -105,22 +107,31 @@ export default function ChecklistClient({
           azione: "",
           osservazioneEvidenza: "",
           osservazioni: "",
+          dataVerifica: "",
           sezioneId: sez.id,
         };
       }
     }
     for (const r of risposteIniziali) {
       if (!map[r.domanda_id]) continue; // ignora la riga sintetica nominativi
+      const dv =
+        r.campo_extra && typeof r.campo_extra === "object"
+          ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? ""
+          : "";
       map[r.domanda_id] = {
         valore: r.valore,
         azione: r.azione_correttiva ?? "",
         osservazioneEvidenza: r.osservazione_evidenza ?? "",
         osservazioni: r.osservazioni ?? "",
+        dataVerifica: dv,
         sezioneId: r.sezione_id,
       };
     }
     return map;
   });
+
+  // Lookup domanda per id (per sapere se ha campo data, gate, ecc.).
+  const domandeById = new Map(sezioni.flatMap((s) => s.domande.map((d) => [d.id, d] as const)));
 
   const [nominativi, setNominativi] =
     useState<NominativiStrutturati>(nominativiIniziali);
@@ -182,6 +193,9 @@ export default function ChecklistClient({
   }
 
   async function performSave(domandaId: string, entry: Entry) {
+    // Passa la data solo per le domande con campo data (es. D-01-016); per le
+    // altre `undefined` lascia campo_extra invariato.
+    const haCampoData = domandeById.get(domandaId)?.campo_data === true;
     const res = await salvaRispostaAction({
       visitaId,
       domandaId,
@@ -192,6 +206,7 @@ export default function ChecklistClient({
         ? entry.osservazioneEvidenza
         : null,
       osservazioni: entry.osservazioni.trim() ? entry.osservazioni : null,
+      dataVerifica: haCampoData ? (entry.dataVerifica.trim() ? entry.dataVerifica : null) : undefined,
     });
     setSalvataggio(res.ok ? "saved" : "error");
     if (!res.ok) setErroreMsg(res.error);
@@ -203,6 +218,7 @@ export default function ChecklistClient({
       azione: "",
       osservazioneEvidenza: "",
       osservazioni: "",
+      dataVerifica: "",
       sezioneId,
     };
     const entry: Entry = { ...corrente, ...patch, sezioneId };
@@ -431,17 +447,22 @@ export default function ChecklistClient({
         completa: genericheDate === generiche.length && formCompleta,
       };
     }
+    // Esclude le sotto-domande gate non attive (es. sorveglianza sanitaria
+    // collassata su NA/NV della domanda filtro D-01-012).
+    const attive = domande.filter(
+      (d) => !d.gated_by || domandaGateAttiva(d, risposte[d.gated_by]?.valore ?? null)
+    );
     // Una domanda conta come "data" solo se completa (esito + eventuale
     // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
-    const date = domande.filter((d) => {
+    const date = attive.filter((d) => {
       const e = risposte[d.id];
       return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
     }).length;
     return {
       date,
-      totale: domande.length,
+      totale: attive.length,
       collassata: false,
-      completa: domande.length > 0 && date === domande.length,
+      completa: attive.length > 0 && date === attive.length,
     };
   }
 
@@ -545,6 +566,11 @@ export default function ChecklistClient({
             // Formazione per-nominativo: le domande mappate a una figura sono
             // gestite dal componente dedicato; restano dirette solo le generiche.
             .filter((d) => !isFormazione || !d.figura_nominativo)
+            // Gate condizionale: nasconde le sotto-domande non attive (es.
+            // sorveglianza sanitaria se la filtro D-01-012 è NA/NV). Reattivo.
+            .filter(
+              (d) => !d.gated_by || domandaGateAttiva(d, risposte[d.gated_by]?.valore ?? null)
+            )
             .map((d) => {
               const entry = risposte[d.id];
               return (
@@ -555,6 +581,9 @@ export default function ChecklistClient({
                   azioneCorrettiva={entry?.azione ?? ""}
                   osservazioneEvidenza={entry?.osservazioneEvidenza ?? ""}
                   osservazioni={entry?.osservazioni ?? ""}
+                  mostraDataVerifica={d.campo_data === true}
+                  dataVerifica={entry?.dataVerifica ?? ""}
+                  onDataVerifica={(t) => aggiorna(d.id, sezione.id, { dataVerifica: t })}
                   disabled={chiusa}
                   onValore={(v) => {
                     const corrente = risposte[d.id];
