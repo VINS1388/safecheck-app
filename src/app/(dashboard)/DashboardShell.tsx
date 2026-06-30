@@ -9,6 +9,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/clienti", label: "Clienti" },
   { href: "/visite", label: "Visite" },
+  { href: "/scadenze", label: "Scadenze" },
 ];
 
 interface Props {
