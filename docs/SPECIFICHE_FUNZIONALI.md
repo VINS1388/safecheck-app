@@ -94,7 +94,9 @@ Usare solo come riferimento storico, non come base di lavoro.
 
 | Sprint | Contenuto |
 |---|---|
-| Sprint 12 | Motore checklist evoluto: nominativi dinamici per domanda, scadenze automatiche da data verifica |
+| Sprint 12 | SEZ-03 formazione per-nominativo (vista derivata, ID stabili nominativi, migration 015) | ✅ Completato |
+| Sprint 12.1 | Sotto-sezione sorveglianza sanitaria in SEZ-01 (gate per-domanda, migration 016) | ✅ Completato |
+| Sprint 12.2 | SEZ-03 logica DL/RSPP (stessa persona → DL-SPP combinata, persone diverse → domande separate) | 🔄 In progettazione |
 | Sprint 13 | NC tracking: scadenze azioni correttive, solleciti automatici via Resend |
 | Sprint 14 | Pianificazione visite: contratto N visite/anno per sede, alert scadenze; evoluzione verso menu "Pianificazione" centralizzato con assegnazione tecnico (riflette il reparto pianificazione reale dello Studio) |
 | Sprint 15 | Sopralluogo planimetrico (stile PlanRadar — pin su planimetria, modulo separato dal verbale checklist) |
@@ -147,7 +149,7 @@ la checklist canonica delle domande sicurezza senza istruzione esplicita.
 | SEZ-08 | Appalti e contratti d'opera (Art. 26 / DUVRI) | 9 | Prima sezione con logica condizionale — vedi 3b |
 
 **Totale domande:** 64 (verificato post migration 011, Sprint 9; struttura invariata da migration 012 — Sprint 9.1 aggiunge tabelle separate per le risposte multi-impresa, non nuove domande nel template).
-**Versione template_master:** 4 (migration 012, Sprint 9.1 — marker `multi_impresa: true` su SEZ-08).
+**Versione template_master:** 6 (migration 016, Sprint 12.1 — gate per-domanda sorveglianza sanitaria in SEZ-01).
 
 ### Tipi di risposta
 
@@ -807,5 +809,5 @@ il caso d'uso attuale.
 
 ---
 
-*Documento creato: giugno 2025 — Ultimo aggiornamento: 30 giugno 2026 (DOC-ALIGN-05, post Sprint 11 + fix stato_verbale)*
+*Documento creato: giugno 2025 — Ultimo aggiornamento: 30 giugno 2026 (DOC-ALIGN-07, post Sprint 12.1 / Sprint 12.2 in progettazione)*
 *Da aggiornare ad ogni sessione di design SafeCheck su Claude.ai*
