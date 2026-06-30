@@ -27,7 +27,7 @@ export default function NuovoClientePage() {
           <input
             name="ragione_sociale"
             required
-            placeholder="Alice Pizza Srl"
+            placeholder="Pane Pizza Srl"
             className={inputCls}
           />
         </div>

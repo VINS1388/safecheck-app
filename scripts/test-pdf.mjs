@@ -96,7 +96,7 @@ const dati = {
       "Si raccomanda di completare le azioni correttive entro 60 giorni e di programmare un sopralluogo di follow-up.",
     numero_verbale: "SC-2026-TEST",
   },
-  cliente: { ragione_sociale: "Alice Pizza Srl" },
+  cliente: { ragione_sociale: "Pane Pizza Srl" },
   sede: { nome: "Sede operativa", indirizzo: "Via Roma 1", citta: "Palermo" },
   specialist: { nome_completo: "Mario Rossi", qualifica: "RSPP" },
   referente_cliente: "Luigi Bianchi",

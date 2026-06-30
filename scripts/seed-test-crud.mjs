@@ -41,13 +41,13 @@ const supabase = createClient(URL, SERVICE_KEY, {
 
 const CLIENTI = [
   {
-    ragione_sociale: "Alice Pizza Srl",
+    ragione_sociale: "Pane Pizza Srl",
     partita_iva: "01234567890",
     citta: "Roma",
     provincia: "RM",
     indirizzo_sede_legale: "Via dei Forni 10",
     referente_principale: "Mario Bianchi",
-    email_referente: "mario.bianchi@alicepizza.test",
+    email_referente: "mario.bianchi@panepizza.test",
     sedi: [
       { nome: "Sede principale", indirizzo: "Via dei Forni 10", citta: "Roma", cap: "00185", provincia: "RM" },
       { nome: "Punto vendita Tuscolano", indirizzo: "Via Tuscolana 250", citta: "Roma", cap: "00181", provincia: "RM" },

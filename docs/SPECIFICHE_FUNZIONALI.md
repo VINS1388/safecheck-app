@@ -63,12 +63,14 @@ Usare solo come riferimento, non come base di lavoro.
 | Sprint 2 | Seed 52 domande, RLS 28 policy, tipi TypeScript | ✅ Completato |
 | Sprint 3 | Auth Supabase, login/logout, layout dashboard, trigger new user | ✅ Completato |
 | Sprint 4 | CRUD clienti e sedi, componenti UI base (Button, Input, Card, Badge) | ✅ Completato |
-| Sprint 5 | Compilazione checklist in campo | 🔄 In avvio |
+| Sprint 5 | Compilazione checklist in campo | ✅ Completato |
+| Sprint 6 | Generazione verbale PDF server-side (PDFKit), bucket privato, numerazione RPC | ✅ Completato |
+| Sprint 7 | Schermata avvio, nominativi SEZ-01, motivazione NV/NA, mobile-first | ✅ Completato |
+| Sprint 7-FIX | Default azione/motivazione obbligatori, riscrittura domande SEZ-01/06 (55 tot), campo descrizione | ✅ Completato |
+| Sprint 8 | Campi testo espandibili, campo osservazione evidenza, fix layout PDF | ✅ Completato |
+| PRE-GOLIVE | Rename cliente test → "Pane Pizza Srl", utente reale parametrico, verifica end-to-end | ✅ Completato |
 
-**Sprint pianificati:**
-- Sprint 6: generazione verbale PDF server-side
-- Sprint 7: archivio verbali per azienda (stati, azioni contestuali, genealogia)
-- Sprint 8: rifinitura, test end-to-end, go-live cliente
+**Stato: pronto per go-live cliente reale.**
 
 ### Verticale attuale e predisposizione template futuri
 

@@ -225,7 +225,14 @@ Formato: `SC-YYYY-NNN` (es. `SC-2025-0042`)
 | Sprint 2 | Seed 52 domande, RLS 28 policy, tipi TypeScript | ✅ Completato |
 | Sprint 3 | Auth Supabase, login/logout, layout dashboard, trigger new user | ✅ Completato |
 | Sprint 4 | CRUD clienti e sedi, componenti UI base (Button, Input, Card, Badge) | ✅ Completato |
-| Sprint 5 | Compilazione checklist in campo | 🔄 In avvio |
+| Sprint 5 | Compilazione checklist in campo | ✅ Completato |
+| Sprint 6 | PDF server-side PDFKit, bucket privato, numerazione RPC atomica | ✅ Completato |
+| Sprint 7 | Schermata avvio, nominativi SEZ-01, motivazione NV/NA, mobile-first | ✅ Completato |
+| Sprint 7-FIX | Default azione/motivazione obbligatori, riscrittura domande SEZ-01/06 (55 tot), campo descrizione | ✅ Completato |
+| Sprint 8 | Campi testo espandibili, campo osservazione evidenza, fix layout PDF (rilievi + pagine vuote) | ✅ Completato |
+| PRE-GOLIVE | Rename cliente test → "Pane Pizza Srl", utente reale parametrico, verifica end-to-end | ✅ Completato |
+
+**Stato: pronto per go-live cliente reale.**
 
 **Repo attivo:** https://github.com/VINS1388/safecheck-app
 **Deploy:** https://safecheck-app-tau.vercel.app
@@ -249,7 +256,7 @@ prodotte nelle sessioni Claude.ai e documentate in `docs/SPECIFICHE_FUNZIONALI.m
 
 - Tutti i dati usati in MVP-A e MVP-B devono essere **fittizi**
 - Dati reali di clienti richiedono autorizzazione scritta esplicita — non procedere mai senza
-- Azienda di test: "Alice Pizza Srl" o equivalente di fantasia
+- Azienda di test: "Pane Pizza Srl" o equivalente di fantasia
 
 ---
 
