@@ -10,10 +10,10 @@ import {
   FIGURE_SICUREZZA,
   SEZIONE_NOMINATIVI,
   ETICHETTE_TIPO_IMPRESA,
-  idRispostaFormazione,
 } from "@/types";
 import { sezioneCollassata, domandaGateAttiva } from "@/lib/checklist/completa";
 import { normalizzaNominativi } from "@/lib/nominativi";
+import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
@@ -285,12 +285,17 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
     // stampa solo la domanda filtro; le D-08-002..009 vanno per impresa sotto.
     const soloFiltro = collassata || (Boolean(sez.multi_impresa) && !collassata);
 
+    // Formazione: id delle domande generiche dirette attive (D-03-005 esclusa
+    // quando DL/RSPP sono fusi → gestita come istanza per-nominativo sotto).
+    const genFormIds = sez.formazione_per_nominativo
+      ? new Set(genericheFormazione(sez, dati.nominativi).map((d) => d.id))
+      : null;
+
     const domande = [...sez.domande]
       .sort((a, b) => a.ordine - b.ordine)
       .filter((d) => !soloFiltro || d.id === sez.domanda_filtro)
-      // Formazione per-nominativo: le domande mappate a una figura sono stampate
-      // per nominativo sotto; qui restano solo le generiche (Lavoratori, DL-SPP).
-      .filter((d) => !sez.formazione_per_nominativo || !d.figura_nominativo)
+      // Formazione per-nominativo: restano dirette solo le generiche attive.
+      .filter((d) => !genFormIds || genFormIds.has(d.id))
       // Gate condizionale: omette le sotto-domande non attive (es. sorveglianza
       // sanitaria se la filtro D-01-012 è NA/NV).
       .filter((d) => !d.gated_by || domandaGateAttiva(d, dati.risposte[d.gated_by]?.esito ?? null));
@@ -405,34 +410,39 @@ function renderFormazioneNominativi(
   sez: VerbaleData["template"]["sezioni"][number],
   dati: VerbaleData
 ): void {
-  const gruppi = [...sez.domande]
-    .filter((d) => d.figura_nominativo)
-    .sort((a, b) => a.ordine - b.ordine)
-    .map((d) => ({
-      domanda: d,
-      figura: d.figura_nominativo!,
-      lista: dati.nominativi[d.figura_nominativo!] ?? [],
-    }))
-    .filter((g) => g.lista.length > 0);
+  const istanze = [...istanzeFormazione(sez, dati.nominativi)].sort(
+    (a, b) => a.ordine - b.ordine
+  );
+  if (istanze.length === 0) return;
 
-  for (const { domanda, figura, lista } of gruppi) {
+  // Raggruppa per figura mantenendo l'ordine di prima occorrenza.
+  const gruppi: { label: string; key: string; lista: typeof istanze }[] = [];
+  for (const i of istanze) {
+    let g = gruppi.find((x) => x.key === i.figuraKey);
+    if (!g) {
+      g = { label: i.figuraLabel, key: i.figuraKey, lista: [] };
+      gruppi.push(g);
+    }
+    g.lista.push(i);
+  }
+
+  for (const g of gruppi) {
     assicuraSpazio(doc, 40);
     doc.x = MARGINE;
-    const label = FIGURE_SICUREZZA.find((f) => f.key === figura)?.label ?? figura;
-    doc.fillColor(NERO).font("Helvetica-Bold").fontSize(11).text(label);
+    doc.fillColor(NERO).font("Helvetica-Bold").fontSize(11).text(g.label);
     doc.moveDown(0.3);
 
-    for (const nom of lista) {
+    for (const ist of g.lista) {
       assicuraSpazio(doc, 50);
       doc.x = MARGINE;
-      const r = dati.risposte[idRispostaFormazione(domanda.id, nom.id)] ?? null;
+      const r = dati.risposte[ist.compositeId] ?? null;
       const esito = r?.esito ?? null;
 
       doc
         .fillColor(NERO)
         .font("Helvetica")
         .fontSize(10.5)
-        .text(`Formazione di ${nom.nome}`, { width: larghezzaContenuto(doc) });
+        .text(ist.testo, { width: larghezzaContenuto(doc) });
       doc.moveDown(0.2);
 
       const colore = esito ? COLORE_ESITO[esito] : GRIGIO;
@@ -636,17 +646,15 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
         conteggi[r.esito] += 1;
       }
     } else if (sez.formazione_per_nominativo) {
-      // SEZ-03 formazione: domande generiche + 1 risposta per nominativo.
-      for (const d of sez.domande) {
-        if (d.figura_nominativo) {
-          for (const nom of dati.nominativi[d.figura_nominativo] ?? []) {
-            const e = dati.risposte[idRispostaFormazione(d.id, nom.id)]?.esito;
-            if (e) conteggi[e] += 1;
-          }
-        } else {
-          const esito = dati.risposte[d.id]?.esito;
-          if (esito) conteggi[esito] += 1;
-        }
+      // SEZ-03 formazione: generiche dirette attive + 1 risposta per istanza
+      // (con fusione DL/RSPP applicata).
+      for (const d of genericheFormazione(sez, dati.nominativi)) {
+        const esito = dati.risposte[d.id]?.esito;
+        if (esito) conteggi[esito] += 1;
+      }
+      for (const ist of istanzeFormazione(sez, dati.nominativi)) {
+        const esito = dati.risposte[ist.compositeId]?.esito;
+        if (esito) conteggi[esito] += 1;
       }
     } else {
       for (const d of sez.domande) {

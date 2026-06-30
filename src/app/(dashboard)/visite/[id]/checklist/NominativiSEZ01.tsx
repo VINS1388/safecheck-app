@@ -8,9 +8,9 @@ interface Props {
   nominativi: NominativiStrutturati;
   disabled?: boolean;
   onChange: (next: NominativiStrutturati) => void;
-  // True se il nominativo ha già una risposta di formazione (SEZ-03): in tal
-  // caso la rimozione richiede conferma esplicita (Sprint 12).
-  haRisposta?: (nominativoId: string) => boolean;
+  // Ritorna le etichette delle risposte di formazione che diventerebbero orfane
+  // applicando `next` (Sprint 12.2). Se non vuoto → conferma esplicita.
+  orfani?: (next: NominativiStrutturati) => string[];
 }
 
 function nuovoId(): string {
@@ -21,7 +21,7 @@ function nuovoId(): string {
 }
 
 interface Conferma {
-  nome: string;
+  orfani: string[];
   apply: () => void;
 }
 
@@ -32,23 +32,37 @@ export default function NominativiSEZ01({
   nominativi,
   disabled,
   onChange,
-  haRisposta,
+  orfani,
 }: Props) {
   const [conferma, setConferma] = useState<Conferma | null>(null);
 
   function lista(key: string): Nominativo[] {
     return nominativi[key] ?? [];
   }
+  /** Applica `next` direttamente, o chiede conferma se causa risposte orfane. */
+  function applica(next: NominativiStrutturati) {
+    const o = orfani?.(next) ?? [];
+    if (o.length > 0) {
+      setConferma({ orfani: o, apply: () => onChange(next) });
+    } else {
+      onChange(next);
+    }
+  }
   function setLista(key: string, next: Nominativo[]) {
-    onChange({ ...nominativi, [key]: next });
+    applica({ ...nominativi, [key]: next });
   }
 
-  /** Rimozione con conferma se il nominativo ha già una risposta di formazione. */
-  function chiediRimozione(nom: Nominativo, apply: () => void) {
-    if (haRisposta?.(nom.id)) {
-      setConferma({ nome: nom.nome, apply });
+  const dl = lista("DL")[0] ?? null;
+  const rspp = lista("RSPP")[0] ?? null;
+  const dlRsppFusi = Boolean(dl && rspp && dl.id === rspp.id);
+
+  function toggleDlRspp(checked: boolean) {
+    if (checked) {
+      if (!dl) return; // serve un DL per fondere
+      applica({ ...nominativi, RSPP: [{ id: dl.id, nome: dl.nome }] });
     } else {
-      apply();
+      // Sfusione: RSPP torna vuoto, il tecnico inserirà la persona separata.
+      applica({ ...nominativi, RSPP: [] });
     }
   }
 
@@ -63,8 +77,49 @@ export default function NominativiSEZ01({
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {FIGURE_SICUREZZA.map((f) =>
-          f.multiplo ? (
+        {FIGURE_SICUREZZA.map((f) => {
+          // RSPP: gestione speciale per il toggle DL-SPP.
+          if (f.key === "RSPP") {
+            return (
+              <div key={f.key}>
+                <label className="block text-xs font-medium text-gray-700">{f.label}</label>
+                {dlRsppFusi ? (
+                  <p className="mt-1 flex min-h-[44px] items-center rounded-lg border border-dashed border-[#1e3a5f]/40 bg-[#1e3a5f]/5 px-3 text-sm text-[#1e3a5f]">
+                    Coincide con il Datore di Lavoro ({dl?.nome})
+                  </p>
+                ) : (
+                  <input
+                    value={rspp?.nome ?? ""}
+                    onChange={(e) => {
+                      const nome = e.target.value;
+                      if (rspp) {
+                        if (!nome.trim()) return setLista("RSPP", []);
+                        return setLista("RSPP", [{ ...rspp, nome }]);
+                      }
+                      if (nome.trim()) setLista("RSPP", [{ id: nuovoId(), nome }]);
+                    }}
+                    disabled={disabled}
+                    placeholder="Nome e cognome"
+                    className={`mt-1 ${INPUT}`}
+                  />
+                )}
+                {!disabled && (
+                  <label className="mt-1.5 flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={dlRsppFusi}
+                      disabled={!dl}
+                      onChange={(e) => toggleDlRspp(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                    />
+                    Il Datore di Lavoro svolge direttamente i compiti di RSPP (percorso DL-SPP)
+                  </label>
+                )}
+              </div>
+            );
+          }
+
+          return f.multiplo ? (
             <FiguraMultipla
               key={f.key}
               label={f.label}
@@ -77,11 +132,7 @@ export default function NominativiSEZ01({
                   lista(f.key).map((n) => (n.id === id ? { ...n, nome } : n))
                 )
               }
-              onRemove={(nom) =>
-                chiediRimozione(nom, () =>
-                  setLista(f.key, lista(f.key).filter((n) => n.id !== nom.id))
-                )
-              }
+              onRemove={(nom) => setLista(f.key, lista(f.key).filter((n) => n.id !== nom.id))}
             />
           ) : (
             <FiguraSingola
@@ -92,27 +143,29 @@ export default function NominativiSEZ01({
               onSet={(nome) => {
                 const corrente = lista(f.key)[0] ?? null;
                 if (corrente) {
-                  // Svuotare = rimuovere: conferma se ha risposta formazione.
-                  if (!nome.trim()) {
-                    chiediRimozione(corrente, () => setLista(f.key, []));
-                    return;
-                  }
+                  if (!nome.trim()) return setLista(f.key, []);
                   setLista(f.key, [{ ...corrente, nome }]); // rename, id invariato
                 } else if (nome.trim()) {
                   setLista(f.key, [{ id: nuovoId(), nome }]);
                 }
               }}
             />
-          )
-        )}
+          );
+        })}
       </div>
 
       {conferma && (
         <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
           <p className="text-sm text-amber-900">
-            <span className="font-semibold">{conferma.nome}</span> ha già una
-            risposta di formazione compilata. Rimuoverlo la eliminerà. Confermi?
+            Questa modifica eliminerà {conferma.orfani.length} rispost
+            {conferma.orfani.length === 1 ? "a" : "e"} di formazione già compilat
+            {conferma.orfani.length === 1 ? "a" : "e"}:
           </p>
+          <ul className="mt-1 list-inside list-disc text-xs text-amber-800">
+            {conferma.orfani.map((o, i) => (
+              <li key={i}>{o}</li>
+            ))}
+          </ul>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
@@ -122,7 +175,7 @@ export default function NominativiSEZ01({
               }}
               className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
             >
-              Rimuovi e elimina risposta
+              Procedi ed elimina
             </button>
             <button
               type="button"

@@ -1,11 +1,7 @@
 "use client";
 
-import { FIGURE_SICUREZZA, idRispostaFormazione } from "@/types";
-import type {
-  DomandaTemplate,
-  EsitoRisposta,
-  NominativiStrutturati,
-} from "@/types";
+import type { DomandaTemplate, EsitoRisposta } from "@/types";
+import type { IstanzaFormazione } from "@/lib/checklist/formazione";
 import DomandaCard from "./DomandaCard";
 
 /** Stato locale di una risposta di formazione per-nominativo. */
@@ -23,12 +19,9 @@ export const FORM_ENTRY_VUOTA: FormEntry = {
   dataVerifica: "",
 };
 
-const LABEL_FIGURA = new Map(FIGURE_SICUREZZA.map((f) => [f.key, f.label]));
-
 interface Props {
-  // Le domande SEZ-03 mappate a una figura (con figura_nominativo).
-  domandeFigura: DomandaTemplate[];
-  nominativi: NominativiStrutturati;
+  // Istanze attive (già con fusione DL/RSPP applicata), ordinate.
+  istanze: IstanzaFormazione[];
   // risposte[compositeDomandaId] -> FormEntry
   risposte: Record<string, FormEntry>;
   disabled: boolean;
@@ -36,19 +29,12 @@ interface Props {
 }
 
 export default function FormazioneNominativi({
-  domandeFigura,
-  nominativi,
+  istanze,
   risposte,
   disabled,
   onChange,
 }: Props) {
-  // Gruppi (in ordine di sezione) che hanno almeno un nominativo.
-  const gruppi = [...domandeFigura]
-    .sort((a, b) => a.ordine - b.ordine)
-    .map((d) => ({ domanda: d, figura: d.figura_nominativo!, lista: nominativi[d.figura_nominativo!] ?? [] }))
-    .filter((g) => g.lista.length > 0);
-
-  if (gruppi.length === 0) {
+  if (istanze.length === 0) {
     return (
       <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
         Nessun nominativo inserito in SEZ-01: le domande di formazione per figura
@@ -57,29 +43,38 @@ export default function FormazioneNominativi({
     );
   }
 
+  // Raggruppa per figura mantenendo l'ordine (per `ordine` della domanda base).
+  const ordinate = [...istanze].sort((a, b) => a.ordine - b.ordine);
+  const gruppi: { figuraKey: string; figuraLabel: string; lista: IstanzaFormazione[] }[] = [];
+  for (const i of ordinate) {
+    let g = gruppi.find((x) => x.figuraKey === i.figuraKey);
+    if (!g) {
+      g = { figuraKey: i.figuraKey, figuraLabel: i.figuraLabel, lista: [] };
+      gruppi.push(g);
+    }
+    g.lista.push(i);
+  }
+
   return (
     <div className="space-y-6">
-      {gruppi.map(({ domanda, figura, lista }) => (
-        <div key={figura}>
-          <h3 className="mb-2 text-sm font-semibold text-gray-900">
-            {LABEL_FIGURA.get(figura) ?? figura}
-          </h3>
+      {gruppi.map((g) => (
+        <div key={g.figuraKey}>
+          <h3 className="mb-2 text-sm font-semibold text-gray-900">{g.figuraLabel}</h3>
           <div className="space-y-4">
-            {lista.map((nom) => {
-              const cid = idRispostaFormazione(domanda.id, nom.id);
-              const e = risposte[cid] ?? FORM_ENTRY_VUOTA;
-              // Domanda sintetica personalizzata per il nominativo (mantiene la
-              // descrizione/correzione del requisito formativo della figura).
+            {g.lista.map((ist) => {
+              const e = risposte[ist.compositeId] ?? FORM_ENTRY_VUOTA;
+              // Domanda sintetica personalizzata (mantiene descrizione/correzione
+              // del requisito formativo della figura/base).
               const domandaNom: DomandaTemplate = {
-                ...domanda,
-                id: cid,
-                testo: `Formazione di ${nom.nome}`,
+                ...ist.domandaBase,
+                id: ist.compositeId,
+                testo: ist.testo,
                 campo_extra: undefined,
                 figura_nominativo: undefined,
               };
               return (
                 <DomandaCard
-                  key={cid}
+                  key={ist.compositeId}
                   domanda={domandaNom}
                   valore={e.esito}
                   azioneCorrettiva={e.azione}
@@ -89,21 +84,21 @@ export default function FormazioneNominativi({
                   mostraOsservazioneEvidenza={false}
                   mostraDataVerifica
                   dataVerifica={e.dataVerifica}
-                  onDataVerifica={(v) => onChange(cid, { dataVerifica: v })}
+                  onDataVerifica={(v) => onChange(ist.compositeId, { dataVerifica: v })}
                   onValore={(v) => {
                     const patch: Partial<FormEntry> = { esito: v };
                     if (
                       (v === "NC" || v === "PC") &&
                       !e.azione.trim() &&
-                      domanda.correzione_default?.trim()
+                      ist.domandaBase.correzione_default?.trim()
                     ) {
-                      patch.azione = domanda.correzione_default;
+                      patch.azione = ist.domandaBase.correzione_default;
                     }
-                    onChange(cid, patch);
+                    onChange(ist.compositeId, patch);
                   }}
-                  onAzione={(t) => onChange(cid, { azione: t })}
+                  onAzione={(t) => onChange(ist.compositeId, { azione: t })}
                   onOsservazioneEvidenza={() => {}}
-                  onMotivazione={(t) => onChange(cid, { osservazione: t })}
+                  onMotivazione={(t) => onChange(ist.compositeId, { osservazione: t })}
                 />
               );
             })}

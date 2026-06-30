@@ -11,7 +11,7 @@ import type {
   TemplateSnapshot,
   TipoImpresa,
 } from "@/types";
-import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE, idRispostaFormazione } from "@/types";
+import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
 import {
   rispostaCompleta,
@@ -19,8 +19,13 @@ import {
   domandaAttiva,
   domandaGateAttiva,
   completezzaImpreseSezioneOtto,
-  completezzaFormazioneNominativi,
+  completezzaFormazione,
 } from "@/lib/checklist/completa";
+import {
+  istanzeFormazione,
+  genericheFormazione,
+  dlCoincideRspp,
+} from "@/lib/checklist/formazione";
 import {
   salvaRispostaAction,
   salvaNominativiAction,
@@ -40,7 +45,6 @@ import FormazioneNominativi, {
   type FormEntry,
   FORM_ENTRY_VUOTA,
 } from "./FormazioneNominativi";
-import { tuttiNominativi } from "@/lib/nominativi";
 
 interface Entry {
   valore: EsitoRisposta | null;
@@ -97,6 +101,8 @@ export default function ChecklistClient({
 }: Props) {
   const sezioni = [...template.sezioni].sort((a, b) => a.ordine - b.ordine);
   const chiusa = stato !== "bozza";
+  // Sezione formazione per-nominativo (SEZ-03), se presente nello snapshot.
+  const sezFormazione = sezioni.find((s) => s.formazione_per_nominativo) ?? null;
 
   const [risposte, setRisposte] = useState<Record<string, Entry>>(() => {
     const map: Record<string, Entry> = {};
@@ -226,34 +232,70 @@ export default function ChecklistClient({
     pianifica(domandaId, () => performSave(domandaId, entry));
   }
 
-  /** True se il nominativo ha già una risposta di formazione con esito (SEZ-03). */
-  function haRispostaFormazione(nominativoId: string): boolean {
-    const suffix = SEP_FORMAZIONE + nominativoId;
-    return Object.entries(risposteFormazione).some(
-      ([cid, e]) => cid.endsWith(suffix) && e.esito != null
-    );
+  /** Composite id attivi (istanze formazione) per uno stato nominativi. */
+  function compositeAttivi(nom: NominativiStrutturati): string[] {
+    return sezFormazione ? istanzeFormazione(sezFormazione, nom).map((i) => i.compositeId) : [];
+  }
+
+  /** Etichette delle risposte di formazione che `next` renderebbe orfane. */
+  function orfaniFormazione(next: NominativiStrutturati): string[] {
+    if (!sezFormazione) return [];
+    const labels: string[] = [];
+    const dopo = new Set(compositeAttivi(next));
+    for (const i of istanzeFormazione(sezFormazione, nominativi)) {
+      if (!dopo.has(i.compositeId) && risposteFormazione[i.compositeId]?.esito != null) {
+        labels.push(i.testo);
+      }
+    }
+    // D-03-005 diretta (generica) → diventa istanza per-nominativo quando si
+    // fondono DL/RSPP: la risposta diretta esistente sarebbe orfana.
+    if (
+      !dlCoincideRspp(nominativi) &&
+      dlCoincideRspp(next) &&
+      risposte["D-03-005"]?.valore != null
+    ) {
+      labels.push("Formazione DL-SPP (risposta generica)");
+    }
+    return labels;
   }
 
   function handleNominativi(next: NominativiStrutturati) {
-    // Nominativi rimossi rispetto allo stato corrente → elimina le eventuali
-    // risposte di formazione orfane (la conferma è già avvenuta in NominativiSEZ01).
-    const idsPrima = new Set(tuttiNominativi(nominativi).map((n) => n.id));
-    const idsDopo = new Set(tuttiNominativi(next).map((n) => n.id));
-    const rimossi = [...idsPrima].filter((id) => !idsDopo.has(id));
-
-    if (rimossi.length > 0) {
-      const orfane = Object.keys(risposteFormazione).filter((cid) =>
-        rimossi.some((id) => cid.endsWith(SEP_FORMAZIONE + id))
+    // Elimina le risposte di formazione non più attive con `next` (la conferma
+    // è già avvenuta in NominativiSEZ01). Copre rimozione nominativo e fusione/
+    // sfusione DL-RSPP, in modo uniforme via diff delle istanze.
+    if (sezFormazione) {
+      const dopo = new Set(compositeAttivi(next));
+      const orfaneComp = compositeAttivi(nominativi).filter(
+        (cid) => !dopo.has(cid) && risposteFormazione[cid]?.esito != null
       );
-      if (orfane.length > 0) {
+      if (orfaneComp.length > 0) {
         setRisposteFormazione((prev) => {
           const m = { ...prev };
-          for (const cid of orfane) delete m[cid];
+          for (const cid of orfaneComp) delete m[cid];
           return m;
         });
         void Promise.all(
-          orfane.map((cid) => eliminaRispostaFormazioneAction(visitaId, cid))
+          orfaneComp.map((cid) => eliminaRispostaFormazioneAction(visitaId, cid))
         );
+      }
+      // D-03-005 diretta orfana quando si fondono DL/RSPP.
+      if (
+        !dlCoincideRspp(nominativi) &&
+        dlCoincideRspp(next) &&
+        risposte["D-03-005"]?.valore != null
+      ) {
+        setRisposte((prev) => ({
+          ...prev,
+          "D-03-005": {
+            ...prev["D-03-005"],
+            valore: null,
+            azione: "",
+            osservazioni: "",
+            osservazioneEvidenza: "",
+            dataVerifica: "",
+          },
+        }));
+        void eliminaRispostaFormazioneAction(visitaId, "D-03-005");
       }
     }
 
@@ -359,7 +401,11 @@ export default function ChecklistClient({
   // SEZ-03 formazione per-nominativo: le domande mappate a una figura sono
   // derivate per nominativo; restano dirette solo le generiche (Lavoratori, DL-SPP).
   const isFormazione = Boolean(sezione.formazione_per_nominativo);
-  const domandeFiguraSez = sezione.domande.filter((d) => d.figura_nominativo);
+  // Istanze (con fusione DL/RSPP) e domande generiche dirette attive correnti.
+  const istanzeCorrente = isFormazione ? istanzeFormazione(sezione, nominativi) : [];
+  const genericheIds = new Set(
+    isFormazione ? genericheFormazione(sezione, nominativi).map((d) => d.id) : []
+  );
 
   /** Valore corrente della domanda filtro di una sezione (null se nessuna filtro). */
   function valoreFiltro(sez: { domanda_filtro?: string }): EsitoRisposta | null {
@@ -411,38 +457,29 @@ export default function ChecklistClient({
     // SEZ-03 formazione per-nominativo: domande generiche + (1 per nominativo
     // per ogni figura mappata). Reattivo allo stato corrente di SEZ-01.
     if (sez?.formazione_per_nominativo) {
-      const generiche = domande.filter((d) => !d.figura_nominativo);
+      const generiche = genericheFormazione(sez, nominativi);
       const genericheDate = generiche.filter((d) => {
         const e = risposte[d.id];
         return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
       }).length;
-      const domandeFigura = domande
-        .filter((d) => d.figura_nominativo)
-        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
-      const getR = (did: string, nomId: string) => {
-        const e = risposteFormazione[idRispostaFormazione(did, nomId)];
+      const istanze = istanzeFormazione(sez, nominativi);
+      const getR = (cid: string) => {
+        const e = risposteFormazione[cid];
         return e
           ? { esito: e.esito, azioneCorrettiva: e.azione, osservazione: e.osservazione }
           : null;
       };
-      const nomDi = (fig: string) => (nominativi[fig] ?? []).map((n) => n.id);
-      let formTot = 0;
-      let formDate = 0;
-      for (const df of domandeFigura)
-        for (const nomId of nomDi(df.figura)) {
-          formTot += 1;
-          const r = getR(df.domandaId, nomId);
-          if (rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione))
-            formDate += 1;
-        }
-      const { completa: formCompleta } = completezzaFormazioneNominativi(
-        domandeFigura,
-        nomDi,
+      const formDate = istanze.filter((i) => {
+        const r = getR(i.compositeId);
+        return rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione);
+      }).length;
+      const { completa: formCompleta } = completezzaFormazione(
+        istanze.map((i) => i.compositeId),
         getR
       );
       return {
         date: genericheDate + formDate,
-        totale: generiche.length + formTot,
+        totale: generiche.length + istanze.length,
         collassata: false,
         completa: genericheDate === generiche.length && formCompleta,
       };
@@ -551,7 +588,7 @@ export default function ChecklistClient({
               nominativi={nominativi}
               disabled={chiusa}
               onChange={handleNominativi}
-              haRisposta={haRispostaFormazione}
+              orfani={orfaniFormazione}
             />
           )}
 
@@ -563,9 +600,9 @@ export default function ChecklistClient({
             // Multi-impresa: le domande successive alla filtro sono gestite
             // per impresa nel componente dedicato, non come card di sezione.
             .filter((d) => !isMultiImpresa || d.id === sezione.domanda_filtro)
-            // Formazione per-nominativo: le domande mappate a una figura sono
-            // gestite dal componente dedicato; restano dirette solo le generiche.
-            .filter((d) => !isFormazione || !d.figura_nominativo)
+            // Formazione per-nominativo: restano dirette solo le domande
+            // generiche attive (D-03-005 esclusa quando DL/RSPP sono fusi).
+            .filter((d) => !isFormazione || genericheIds.has(d.id))
             // Gate condizionale: nasconde le sotto-domande non attive (es.
             // sorveglianza sanitaria se la filtro D-01-012 è NA/NV). Reattivo.
             .filter(
@@ -632,8 +669,7 @@ export default function ChecklistClient({
               di SEZ-01, raggruppate per figura. */}
           {isFormazione && (
             <FormazioneNominativi
-              domandeFigura={domandeFiguraSez}
-              nominativi={nominativi}
+              istanze={istanzeCorrente}
               risposte={risposteFormazione}
               disabled={chiusa}
               onChange={handleFormazione}

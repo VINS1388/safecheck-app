@@ -14,9 +14,9 @@ import {
   sezioneCollassata,
   domandaGateAttiva,
   completezzaImpreseSezioneOtto,
-  completezzaFormazioneNominativi,
+  completezzaFormazione,
 } from "@/lib/checklist/completa";
-import { idRispostaFormazione } from "@/types";
+import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 
 export const runtime = "nodejs";
 
@@ -72,12 +72,16 @@ export async function POST(
     const collassata = sezioneCollassata(sez, valoreFiltro);
     const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
     const formazione = Boolean(sez.formazione_per_nominativo);
+    const genFormIds = formazione
+      ? new Set(genericheFormazione(sez, nominativi).map((d) => d.id))
+      : null;
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
       // Multi-impresa: le D-08-002..009 sono validate sotto per impresa.
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
-      // Formazione: le domande mappate a una figura sono validate sotto per nominativo.
-      if (formazione && d.figura_nominativo) continue;
+      // Formazione: solo le generiche dirette attive sono validate qui (le
+      // istanze per-nominativo, fusione DL/RSPP inclusa, sotto).
+      if (genFormIds && !genFormIds.has(d.id)) continue;
       // Gate condizionale (es. sorveglianza sanitaria): salta se non attiva.
       if (d.gated_by && !domandaGateAttiva(d, rispostaPer.get(d.gated_by)?.valore ?? null)) continue;
       const r = rispostaPer.get(d.id);
@@ -104,17 +108,13 @@ export async function POST(
       );
       obbligatorieMancanti += mancanti;
     }
-    // Formazione per-nominativo: ogni nominativo di ogni figura mappata deve
+    // Formazione per-nominativo: ogni istanza (fusione DL/RSPP applicata) deve
     // avere una risposta completa (esito + azione per NC/PC, motivazione NV/NA).
     if (formazione) {
-      const domandeFigura = sez.domande
-        .filter((d) => d.figura_nominativo)
-        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
-      const { mancanti } = completezzaFormazioneNominativi(
-        domandeFigura,
-        (figura) => (nominativi[figura] ?? []).map((n) => n.id),
-        (domandaId, nomId) => {
-          const r = rispostaPer.get(idRispostaFormazione(domandaId, nomId));
+      const { mancanti } = completezzaFormazione(
+        istanzeFormazione(sez, nominativi).map((i) => i.compositeId),
+        (cid) => {
+          const r = rispostaPer.get(cid);
           return r
             ? { esito: r.valore, azioneCorrettiva: r.azione_correttiva, osservazione: r.osservazioni }
             : null;

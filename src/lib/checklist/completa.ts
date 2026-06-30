@@ -186,3 +186,23 @@ export function completezzaFormazioneNominativi(
   }
   return { mancanti, completa: mancanti === 0 };
 }
+
+/**
+ * Completezza di un insieme di istanze di formazione (Sprint 12.2): valuta ogni
+ * composite id con la regola standard (esito + azione NC/PC, motivazione NV/NA).
+ * Sostituisce l'iterazione figura×nominativo quando si usa `istanzeFormazione`
+ * (che applica anche la fusione DL/RSPP).
+ */
+export function completezzaFormazione(
+  compositeIds: string[],
+  getRisposta: (compositeId: string) => RispostaImpresaSlot | null | undefined
+): { mancanti: number; completa: boolean } {
+  let mancanti = 0;
+  for (const cid of compositeIds) {
+    const r = getRisposta(cid);
+    if (!rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione)) {
+      mancanti += 1;
+    }
+  }
+  return { mancanti, completa: mancanti === 0 };
+}

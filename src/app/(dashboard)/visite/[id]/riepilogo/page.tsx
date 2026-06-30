@@ -11,10 +11,10 @@ import {
   sezioneCollassata,
   domandaGateAttiva,
   completezzaImpreseSezioneOtto,
-  completezzaFormazioneNominativi,
+  completezzaFormazione,
 } from "@/lib/checklist/completa";
+import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 import type { EsitoRisposta } from "@/types";
-import { idRispostaFormazione } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
 export interface ConteggiSezione {
@@ -94,13 +94,17 @@ export default async function RiepilogoPage({
     const collassata = sezioneCollassata(sez, valoreFiltro);
     const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
     const formazione = Boolean(sez.formazione_per_nominativo);
+    const genFormIds = formazione
+      ? new Set(genericheFormazione(sez, nominativi).map((d) => d.id))
+      : null;
 
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
       // Multi-impresa: le D-08-002..009 sono aggregate sotto, per impresa.
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
-      // Formazione: le domande mappate a una figura sono aggregate sotto, per nominativo.
-      if (formazione && d.figura_nominativo) continue;
+      // Formazione: solo le generiche dirette attive sono conteggiate qui (le
+      // istanze per-nominativo, fusione DL/RSPP inclusa, sono aggregate sotto).
+      if (genFormIds && !genFormIds.has(d.id)) continue;
       // Gate condizionale (es. sorveglianza sanitaria): salta se non attiva.
       if (
         d.gated_by &&
@@ -143,25 +147,19 @@ export default async function RiepilogoPage({
       c.nonRisposto += mancanti;
     }
 
-    // Formazione per-nominativo: aggrega le risposte per nominativo e somma le
-    // slot mancanti come obbligatorie.
+    // Formazione per-nominativo: aggrega le risposte per istanza (fusione
+    // DL/RSPP applicata) e somma le slot mancanti come obbligatorie.
     if (formazione) {
-      for (const d of sez.domande) {
-        if (!d.figura_nominativo) continue;
-        for (const nom of nominativi[d.figura_nominativo] ?? []) {
-          const v = (rispostaPer.get(idRispostaFormazione(d.id, nom.id))?.valore ??
-            null) as EsitoRisposta | null;
-          if (v) c[v] += 1;
-        }
+      const istanze = istanzeFormazione(sez, nominativi);
+      for (const ist of istanze) {
+        const v = (rispostaPer.get(ist.compositeId)?.valore ??
+          null) as EsitoRisposta | null;
+        if (v) c[v] += 1;
       }
-      const domandeFigura = sez.domande
-        .filter((d) => d.figura_nominativo)
-        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
-      const { mancanti } = completezzaFormazioneNominativi(
-        domandeFigura,
-        (figura) => (nominativi[figura] ?? []).map((n) => n.id),
-        (domandaId, nomId) => {
-          const r = rispostaPer.get(idRispostaFormazione(domandaId, nomId));
+      const { mancanti } = completezzaFormazione(
+        istanze.map((i) => i.compositeId),
+        (cid) => {
+          const r = rispostaPer.get(cid);
           return r
             ? { esito: r.valore, azioneCorrettiva: r.azione_correttiva, osservazione: r.osservazioni }
             : null;
