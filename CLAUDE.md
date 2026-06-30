@@ -142,11 +142,49 @@ conta come mancante ai fini della completezza sezione.
 
 ---
 
-## Ciclo di vita del verbale
+## Ciclo di vita del verbale — ✅ IMPLEMENTATO (Sprint 11)
 
 ```
 bozza ──→ chiuso ──→ sostituito
 ```
+
+### ⚠️ Modello dati reale: DUE colonne di stato distinte — leggere prima di toccare qualunque query
+
+Scoperto durante Sprint 11, verificato e confermato sullo schema live. **Non
+sono la stessa cosa, e usare quella sbagliata produce bug silenziosi** (è già
+successo una volta in produzione — vedi nota più sotto):
+
+- **`stato`** (enum `stato_visita`): ciclo operativo della visita —
+  `pianificata` / `in_corso` / `bozza` / `completata` / `verbale_generato`.
+  **Non contiene `sostituito`.**
+- **`stato_verbale`** (enum `stato_verbale`, nullable): validità del
+  verbale ai fini della macchina a stati di prodotto — `bozza` (o `NULL`
+  prima della prima chiusura) / `chiuso` / `sostituito`. **È questa la
+  colonna che decide la macchina a stati `bozza → chiuso → sostituito`
+  descritta sopra**, non `stato`.
+
+Mapping reale verificato:
+| Stato di prodotto | `stato` | `stato_verbale` | `numero_verbale` |
+|---|---|---|---|
+| bozza | `bozza` | `NULL` | `NULL` |
+| chiuso | `verbale_generato` | `chiuso` | assegnato |
+| sostituito | `verbale_generato` | `sostituito` | assegnato (del verbale originale, invariato) |
+
+**Regola pratica:** ogni nuova query, filtro, KPI o componente UI che deve
+distinguere chiuso da sostituito **deve usare `stato_verbale`**, mai
+`stato` da solo né `numero_verbale != null` (un sostituito ha comunque un
+numero — usare solo quello per dedurre "verbale valido" è il bug già
+corretto in produzione, vedi sotto). `stato` resta corretto per i gate
+generici bozza/non-bozza (es. "posso ancora modificare questo verbale?",
+"posso generare il PDF?").
+
+**Bug noto e già corretto (commit `10e8e57`, post Sprint 11):** la lista
+visite globale e il KPI "Verbali generati" nella scheda cliente inizialmente
+non distinguevano `sostituito` da `chiuso` (usavano `numero_verbale != null`)
+— un verbale sostituito appariva come se fosse ancora valido, scaricabile
+come se fosse la versione corretta. Corretto allineando entrambi a
+`stato_verbale`. Se in futuro emerge un altro punto del codice con lo stesso
+problema, va corretto con lo stesso criterio, non con un pattern diverso.
 
 ### Regole di stato — NON DEROGABILI
 
@@ -156,48 +194,51 @@ bozza ──→ chiuso ──→ sostituito
 | `chiuso` | Leggi · Scarica PDF · Duplica · Crea sostitutivo | PDF immutabile |
 | `sostituito` | Leggi (sola lettura) · Scarica PDF | Mai modificabile |
 
-**Duplica:** disponibile SOLO da stato `chiuso`. Mai da `bozza`.
-**Crea sostitutivo:** disponibile SOLO da stato `chiuso`.
+**Duplica:** disponibile SOLO da stato `chiuso` (`stato_verbale === "chiuso"`).
+Mai da `bozza`. **Nessun limite** al numero di duplicazioni dallo stesso
+verbale chiuso.
+**Crea sostitutivo:** disponibile SOLO da stato `chiuso`. **Un verbale chiuso
+può avere al massimo UN sostitutivo** — bloccato (403 server-side + UI
+disabilitata) se `sostituito_da` è già valorizzato.
 **Modifica diretta:** VIETATA su verbale chiuso. Si usa sempre il flusso sostitutivo.
 
-> Nota: Duplica e Crea sostitutivo sono **progettati ma non ancora implementati
-> in UI/API** — pianificati per Sprint 11. Le regole di stato sopra sono comunque
-> vincolanti fin da ora per qualunque sviluppo che le tocchi.
-
-### Comportamento Duplica
-- Deep clone completo: anagrafica + risposte + azioni correttive
-- Campi resettati nella copia: `id` (nuovo UUID), `data_visita` (oggi), `stato` ("bozza")
+### Comportamento Duplica (implementato)
+- Deep clone completo, transazionale, via RPC `clona_visita()` (migration 014,
+  `SECURITY DEFINER`, `search_path=''`, ogni riferimento schema-qualificato
+  `public.*`): anagrafica + tutte le risposte standard + stato SEZ-08 fedele
+  al sorgente (collassata/legacy v3 **oppure** multi-impresa v4 con remap di
+  `impresa_id` — mai normalizzato) + azioni correttive
+- Campi del nuovo verbale: `id` nuovo UUID, `stato → "bozza"`,
+  `stato_verbale → NULL`, **`numero_verbale → NULL`** (assegnato solo alla
+  chiusura del nuovo verbale, non alla duplicazione — assegnarlo prima
+  avrebbe causato doppia numerazione e rotto l'invariante bozza/chiuso),
+  `data_visita` → oggi, `pdf_path` → null
 - Campo genealogia: `derivato_da: <id_sorgente>`
-- Il verbale originale NON cambia stato
+- Il verbale originale NON cambia stato né dati, in nessun campo
 
-### Comportamento Crea sostitutivo
-- Deep clone completo del verbale chiuso
-- Il verbale originale passa a stato `"sostituito"` e acquisisce `sostituito_da: <nuovo_id>`
-- Il nuovo verbale acquisisce `sostituisce: <id_originale>` e parte come `bozza`
+### Comportamento Crea sostitutivo (implementato)
+- Stessa funzione di clone transazionale della Duplica (non duplicata in
+  due posti)
+- Il verbale originale: `stato_verbale → "sostituito"`,
+  `sostituito_da: <nuovo_id>` (il campo `stato` resta `verbale_generato`,
+  invariato — solo `stato_verbale` riflette "sostituito", vedi nota sopra)
+- Il nuovo verbale: `sostituisce: <id_originale>`, parte come `bozza`
 
-### Struttura dati genealogia verbale
-```json
-{
-  "id": "uuid-v4",
-  "stato": "bozza | chiuso | sostituito",
-  "document_id": "SC-YYYY-NNN",
-  "genealogia": {
-    "derivato_da": "uuid | null",
-    "sostituisce": "uuid | null",
-    "sostituito_da": "uuid | null"
-  },
-  "anagrafica": {},
-  "template_snapshot": {},
-  "risposte": {},
-  "note_finali_visita": "",
-  "meta": {
-    "data_creazione": "ISO8601",
-    "data_chiusura": "ISO8601 | null",
-    "pdf_path": "bucket/private/SC-YYYY-NNN.pdf | null",
-    "pdf_sha256": "interno, mai stampato nel PDF"
-  }
-}
-```
+### Route implementate
+- `POST /api/visite/[id]/duplica` (non `/verbali/:id/duplica` come da
+  bozza iniziale — convenzione di routing reale dell'app)
+- `POST /api/visite/[id]/sostitutivo`
+- Entrambe validano `stato_verbale !== "chiuso"` → `403`, e per il
+  sostitutivo anche `sostituito_da` già valorizzato → `403`
+
+### Genealogia in UI
+Visibile **solo quando esiste** (almeno uno tra `derivato_da` /
+`sostituisce` / `sostituito_da` non null) — nessun elemento vuoto sui
+verbali senza genealogia. Link cliccabile al verbale collegato. Su verbale
+`sostituito`: banner ad alta priorità visiva ("Sostituito da SC-YYYY-NNN"),
+non un dettaglio secondario — è un'informazione di validità, non solo
+storica. Badge "Sostituito" (grigio) anche nella lista visite globale e
+nell'archivio cliente.
 
 ---
 
@@ -220,10 +261,13 @@ bozza ──→ chiuso ──→ sostituito
 
 ## Regole di business — API
 
-- `POST /verbali/:id/duplica` → restituisce `403` se `stato !== "chiuso"` (pianificato Sprint 11)
-- `POST /verbali/:id/sostitutivo` → restituisce `403` se `stato !== "chiuso"` (pianificato Sprint 11)
+- `POST /api/visite/[id]/duplica` → restituisce `403` se `stato_verbale !== "chiuso"` — ✅ implementato Sprint 11
+- `POST /api/visite/[id]/sostitutivo` → restituisce `403` se `stato_verbale !== "chiuso"` oppure se `sostituito_da` già valorizzato — ✅ implementato Sprint 11
 - `PATCH /verbali/:id` → restituisce `403` se `stato !== "bozza"`
 - Mai fidarsi del frontend per le regole di stato: la validazione è sempre server-side
+- **Attenzione alla colonna giusta**: queste validazioni usano `stato_verbale`
+  per chiuso/sostituito, non `stato` — vedi nota dettagliata in "Ciclo di vita
+  del verbale" sopra
 
 ### Autenticazione nelle route API — regola esplicita
 
@@ -312,7 +356,7 @@ Sequenza atomica server-side per azienda (RPC, introdotta Sprint 6).
 | Sprint 9 | SEZ-08 Art. 26 Appalti/DUVRI, motore logica condizionale a livello sezione (migration 011) | ✅ Completato |
 | Sprint 9.1 | Multi-impresa in SEZ-08: tabelle dedicate `imprese_appalto`/`risposte_imprese_appalto`, UI lista+scheda, PDF per-impresa, discriminatore template v4 (migration 012) | ✅ Completato |
 | Sprint 10 | CRUD completo sedi operative (distinte da sede legale su `clienti`), dashboard reale con KPI di studio via RPC, ricerca clienti (migration 013) | ✅ Completato |
-| Sprint 11 | Duplica e Crea sostitutivo (genealogia verbali) | ⏳ Pianificato |
+| Sprint 11 | Duplica e Crea sostitutivo (genealogia verbali, RPC `clona_visita` transazionale, migration 014) | ✅ Completato |
 | Sprint 12 | Motore checklist evoluto: nominativi dinamici per domanda, scadenze automatiche da data verifica | ⏳ Pianificato (dopo periodo pilota) |
 | Sprint 13 | NC tracking: scadenze azioni correttive, solleciti | ⏳ Pianificato |
 | Sprint 14 | Pianificazione visite (contratto N visite/anno per sede, alert scadenze; poi menu centralizzato pianificazione tecnici) | ⏳ Pianificato |
@@ -440,4 +484,4 @@ Code: usare sempre variabili d'ambiente o gestori di credenziali.
 
 ---
 
-*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-04, post Sprint 10)*
+*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-05, post Sprint 11 + fix stato_verbale)*
