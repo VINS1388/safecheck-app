@@ -6,6 +6,7 @@ import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
 import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
 import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
+import { sezioneCollassata } from "@/lib/checklist/completa";
 
 export const runtime = "nodejs";
 
@@ -47,7 +48,13 @@ export async function POST(
   let obbligatorieMancanti = 0;
   let campiTestoMancanti = 0;
   for (const sez of visita.template_snapshot.sezioni) {
+    // Sezione condizionale collassata (filtro = NA): conta solo la domanda filtro.
+    const valoreFiltro = sez.domanda_filtro
+      ? rispostaPer.get(sez.domanda_filtro)?.valore ?? null
+      : null;
+    const collassata = sezioneCollassata(sez, valoreFiltro);
     for (const d of sez.domande) {
+      if (collassata && d.id !== sez.domanda_filtro) continue;
       const r = rispostaPer.get(d.id);
       const v = r?.valore ?? null;
       if (!v) {

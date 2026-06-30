@@ -4,11 +4,13 @@
 export type EsitoRisposta = "C" | "PC" | "NC" | "NV" | "NA";
 
 /**
- * Campo extra (nominativi) associato ad alcune domande di SEZ-01.
- * `multiplo` distingue figure singole (DL, RSPP) da quelle multiple.
+ * Campo extra associato ad alcune domande.
+ *  - tipo "nominativo": figure di SEZ-01 (`multiplo` distingue singole/multiple);
+ *  - tipo "testo_libero": campo testo opzionale multi-riga (es. elenco imprese
+ *    appaltatrici di SEZ-08), persistito su `risposte.osservazione_evidenza`.
  */
 export interface CampoExtraTemplate {
-  tipo: string; // es. "nominativo"
+  tipo: string; // "nominativo" | "testo_libero"
   label: string;
   multiplo: boolean;
 }
@@ -24,15 +26,21 @@ export interface DomandaTemplate {
   correzione_default?: string;
   note_tecnico?: string; // guida tecnica interna (legacy/fallback UI); mai stampata nel PDF
   rif_normativo?: string; // riferimento normativo interno; mai stampato nel PDF
+  nota_ui?: string; // breve nota operativa VISIBILE in UI (es. effetto della domanda filtro); non stampata nel PDF
   campo_extra?: CampoExtraTemplate;
 }
 
-/** Una sezione (SEZ-01..SEZ-07) dello snapshot del template. */
+/** Una sezione (SEZ-01..SEZ-08) dello snapshot del template. */
 export interface SezioneTemplate {
   id: string; // es. "SEZ-01"
   nome: string;
   descrizione?: string;
   ordine: number;
+  // Id della "domanda filtro" della sezione (logica condizionale a livello di
+  // sezione). Se presente e la sua risposta è NA (nessun caso applicabile), le
+  // altre domande della sezione sono nascoste e non richieste. Introdotto in
+  // SEZ-08 (Appalti/DUVRI, Sprint 9).
+  domanda_filtro?: string;
   domande: DomandaTemplate[];
 }
 

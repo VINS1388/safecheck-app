@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita } from "@/lib/db/queries/risposte";
-import { richiedeTesto } from "@/lib/checklist/completa";
+import { richiedeTesto, sezioneCollassata } from "@/lib/checklist/completa";
 import type { EsitoRisposta } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
@@ -53,7 +53,15 @@ export default async function RiepilogoPage({
       campoMancante: 0,
       obbligatorieSenzaRisposta: 0,
     };
+    // Logica condizionale di sezione: se la filtro è NA, le altre domande non
+    // sono richieste e non vanno conteggiate (né come NA, né come mancanti).
+    const valoreFiltro = sez.domanda_filtro
+      ? ((rispostaPer.get(sez.domanda_filtro)?.valore ?? null) as EsitoRisposta | null)
+      : null;
+    const collassata = sezioneCollassata(sez, valoreFiltro);
+
     for (const d of sez.domande) {
+      if (collassata && d.id !== sez.domanda_filtro) continue;
       const r = rispostaPer.get(d.id);
       const v = (r?.valore ?? null) as EsitoRisposta | null;
       if (v === null) {

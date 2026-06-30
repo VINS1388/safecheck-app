@@ -47,8 +47,9 @@ next-env.d.ts
 
 /src/generated/prisma
 
-# PDF di test generati durante lo spike
+# PDF di test generati durante lo spike / i test locali
 /test-verbale.pdf
+/scripts/_*.pdf
 
 # Supabase CLI
 /supabase/.temp/

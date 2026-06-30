@@ -54,6 +54,9 @@ export default function DomandaCard({
 }: DomandaCardProps) {
   const mostraAzione = valore === "NC" || valore === "PC";
   const mostraMotivazione = valore === "NV" || valore === "NA";
+  // Campo testo libero opzionale (es. elenco imprese appaltatrici di SEZ-08):
+  // persistito su `osservazione_evidenza`, sempre visibile, indipendente dall'esito.
+  const campoTestoLibero = domanda.campo_extra?.tipo === "testo_libero";
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -71,6 +74,13 @@ export default function DomandaCard({
       {(domanda.descrizione?.trim() || domanda.note_tecnico?.trim()) && (
         <p className="mt-1 text-xs leading-relaxed text-gray-500">
           {domanda.descrizione?.trim() || domanda.note_tecnico}
+        </p>
+      )}
+
+      {/* Nota operativa UI (es. effetto della domanda filtro di sezione). */}
+      {domanda.nota_ui?.trim() && (
+        <p className="mt-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+          {domanda.nota_ui}
         </p>
       )}
 
@@ -104,6 +114,25 @@ export default function DomandaCard({
         })}
       </div>
 
+      {/* Campo testo libero opzionale, indipendente dall'esito (es. elenco
+          imprese appaltatrici / referenti). Persistito su osservazione_evidenza. */}
+      {campoTestoLibero && (
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-gray-700">
+            {domanda.campo_extra?.label ?? "Annotazione"}{" "}
+            <span className="font-normal text-gray-400">(opzionale)</span>
+          </label>
+          <AutoResizeTextarea
+            value={osservazioneEvidenza}
+            onChange={(e) => onOsservazioneEvidenza(e.target.value)}
+            disabled={disabled}
+            minRows={3}
+            placeholder="Elenca ragione sociale e referente delle imprese presenti…"
+            className={cn(TEXTAREA_BASE, "border-gray-300")}
+          />
+        </div>
+      )}
+
       {mostraAzione && (
         <>
           <div className="mt-3">
@@ -128,21 +157,25 @@ export default function DomandaCard({
             )}
           </div>
 
-          {/* Campo OPZIONALE: descrizione dell'evidenza osservata. Non blocca la chiusura. */}
-          <div className="mt-3">
-            <label className="block text-xs font-medium text-gray-700">
-              Osservazione / descrizione evidenza{" "}
-              <span className="font-normal text-gray-400">(opzionale)</span>
-            </label>
-            <AutoResizeTextarea
-              value={osservazioneEvidenza}
-              onChange={(e) => onOsservazioneEvidenza(e.target.value)}
-              disabled={disabled}
-              minRows={3}
-              placeholder="Descrivi cosa hai osservato durante il sopralluogo…"
-              className={cn(TEXTAREA_BASE, "border-gray-300")}
-            />
-          </div>
+          {/* Campo OPZIONALE: descrizione dell'evidenza osservata. Non blocca la
+              chiusura. Soppresso se la domanda usa già osservazione_evidenza per
+              il campo testo libero (stessa colonna), per evitare doppio input. */}
+          {!campoTestoLibero && (
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-700">
+                Osservazione / descrizione evidenza{" "}
+                <span className="font-normal text-gray-400">(opzionale)</span>
+              </label>
+              <AutoResizeTextarea
+                value={osservazioneEvidenza}
+                onChange={(e) => onOsservazioneEvidenza(e.target.value)}
+                disabled={disabled}
+                minRows={3}
+                placeholder="Descrivi cosa hai osservato durante il sopralluogo…"
+                className={cn(TEXTAREA_BASE, "border-gray-300")}
+              />
+            </div>
+          )}
         </>
       )}
 

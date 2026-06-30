@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
 import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI } from "@/types";
+import { sezioneCollassata } from "@/lib/checklist/completa";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
@@ -255,7 +256,16 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
       renderNominativi(doc, dati.nominativi);
     }
 
-    const domande = [...sez.domande].sort((a, b) => a.ordine - b.ordine);
+    // Logica condizionale di sezione: se la filtro è NA, stampa solo la domanda
+    // filtro (con il suo esito NA) e ometti le altre domande non pertinenti.
+    const valoreFiltro = sez.domanda_filtro
+      ? dati.risposte[sez.domanda_filtro]?.esito ?? null
+      : null;
+    const collassata = sezioneCollassata(sez, valoreFiltro);
+
+    const domande = [...sez.domande]
+      .sort((a, b) => a.ordine - b.ordine)
+      .filter((d) => !collassata || d.id === sez.domanda_filtro);
     for (const d of domande) {
       assicuraSpazio(doc, 70);
 
@@ -289,8 +299,27 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
           });
       }
 
+      // Campo testo libero (es. elenco imprese appaltatrici): stampato a
+      // prescindere dall'esito, con la label del campo_extra. Usa la stessa
+      // colonna `osservazione_evidenza`, quindi è alternativo al blocco standard.
+      const campoTestoLibero = d.campo_extra?.tipo === "testo_libero";
+      if (campoTestoLibero && r?.osservazione_evidenza) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`${d.campo_extra?.label ?? "Annotazione"}: ${r.osservazione_evidenza}`, {
+            width: larghezzaContenuto(doc),
+          });
+      }
+
       // Osservazione / descrizione evidenza (opzionale) per NC / PC
-      if ((esito === "NC" || esito === "PC") && r?.osservazione_evidenza) {
+      if (
+        !campoTestoLibero &&
+        (esito === "NC" || esito === "PC") &&
+        r?.osservazione_evidenza
+      ) {
         doc.moveDown(0.1);
         doc
           .font("Helvetica-Oblique")
@@ -385,7 +414,15 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
       NV: 0,
       NA: 0,
     };
+    // Sezione condizionale collassata (filtro = NA): conteggia solo la domanda
+    // filtro. La riga mostrerà NA=1 (un solo giudizio reale di non applicabilità),
+    // non NA su tutte le domande — rappresentazione onesta delle valutazioni svolte.
+    const valoreFiltro = sez.domanda_filtro
+      ? dati.risposte[sez.domanda_filtro]?.esito ?? null
+      : null;
+    const collassata = sezioneCollassata(sez, valoreFiltro);
     for (const d of sez.domande) {
+      if (collassata && d.id !== sez.domanda_filtro) continue;
       const esito = dati.risposte[d.id]?.esito;
       if (esito) conteggi[esito] += 1;
     }

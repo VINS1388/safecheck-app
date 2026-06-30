@@ -6,7 +6,7 @@ import { cn, formatDate } from "@/lib/utils";
 import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
 import { SEZIONE_NOMINATIVI } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
-import { rispostaCompleta } from "@/lib/checklist/completa";
+import { rispostaCompleta, sezioneCollassata, domandaAttiva } from "@/lib/checklist/completa";
 import { salvaRispostaAction, salvaNominativiAction } from "./actions";
 import DomandaCard from "./DomandaCard";
 import NominativiSEZ01 from "./NominativiSEZ01";
@@ -149,15 +149,29 @@ export default function ChecklistClient({
   const isUltima = sezioneCorrente === sezioni.length - 1;
   const isSezNominativi = sezione.id === SEZIONE_NOMINATIVI;
 
+  /** Valore corrente della domanda filtro di una sezione (null se nessuna filtro). */
+  function valoreFiltro(sez: { domanda_filtro?: string }): EsitoRisposta | null {
+    if (!sez.domanda_filtro) return null;
+    return risposte[sez.domanda_filtro]?.valore ?? null;
+  }
+
   function progresso(sezioneId: string) {
-    const domande = sezioni.find((s) => s.id === sezioneId)?.domande ?? [];
+    const sez = sezioni.find((s) => s.id === sezioneId);
+    const domande = sez?.domande ?? [];
+    // Sezione condizionale collassata (filtro = NA): conta solo la domanda
+    // filtro; le altre non sono richieste.
+    if (sez && sezioneCollassata(sez, valoreFiltro(sez))) {
+      const f = risposte[sez.domanda_filtro!];
+      const data = rispostaCompleta(f?.valore ?? null, f?.azione, f?.osservazioni);
+      return { date: data ? 1 : 0, totale: 1, collassata: true };
+    }
     // Una domanda conta come "data" solo se completa (esito + eventuale
     // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
     const date = domande.filter((d) => {
       const e = risposte[d.id];
       return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
     }).length;
-    return { date, totale: domande.length };
+    return { date, totale: domande.length, collassata: false };
   }
 
   function vaiASezione(i: number) {
@@ -197,7 +211,7 @@ export default function ChecklistClient({
         {/* Navigazione sezioni — scroll orizzontale su mobile */}
         <nav className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {sezioni.map((s, i) => {
-            const { date, totale } = progresso(s.id);
+            const { date, totale, collassata } = progresso(s.id);
             const completa = totale > 0 && date === totale;
             const attiva = i === sezioneCorrente;
             return (
@@ -209,14 +223,18 @@ export default function ChecklistClient({
                   "flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
                   attiva
                     ? "border-[#1e3a5f] bg-[#1e3a5f] text-white"
-                    : completa
-                      ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                      : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                    : collassata
+                      ? "border-gray-300 bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      : completa
+                        ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                        : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
                 )}
+                // Sezione condizionale saltata correttamente (filtro = NA): non è un errore.
+                title={collassata ? "Sezione non applicabile (nessun caso): solo la domanda filtro è richiesta." : undefined}
               >
                 {s.id}{" "}
                 <span className={cn(attiva ? "text-white/80" : "text-gray-400")}>
-                  {date}/{totale}
+                  {collassata ? "N/A" : `${date}/${totale}`}
                 </span>
               </button>
             );
@@ -247,6 +265,9 @@ export default function ChecklistClient({
 
           {[...sezione.domande]
             .sort((a, b) => a.ordine - b.ordine)
+            // Logica condizionale di sezione: se la sezione è collassata
+            // (filtro = NA) mostra solo la domanda filtro. Reattivo lato client.
+            .filter((d) => domandaAttiva(sezione, d.id, valoreFiltro(sezione)))
             .map((d) => {
               const entry = risposte[d.id];
               return (
