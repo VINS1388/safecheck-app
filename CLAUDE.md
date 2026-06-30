@@ -84,7 +84,8 @@ Il template è composto da **64 domande totali**, suddivise in **8 sezioni opera
 | SEZ-07 | Ambienti di lavoro e attrezzature | 5 |
 | SEZ-08 | Appalti e contratti d'opera (Art. 26 / DUVRI) | 9 |
 
-`template_master` versione corrente: **3** (introdotta con migration 011, Sprint 9).
+`template_master` versione corrente: **4** (migration 012, Sprint 9.1 — marker `multi_impresa: true` su SEZ-08).
+Versione precedente 3 introdotta con migration 011, Sprint 9.
 
 **Tipi di risposta validi:** `C` · `PC` · `NC` · `NV` · `NA`
 
@@ -118,15 +119,26 @@ non attivate non sono "valutate NA", semplicemente non sono mai state poste:
 contarle tutte come NA falsificherebbe il riepilogo. Questa regola vale per
 ogni sezione condizionale futura.
 
-**Campo testo libero D-08-003** (elenco imprese): persistito su
-`risposte.osservazione_evidenza` (nessuna colonna dedicata). Quando il campo
-extra testo libero è presente, sostituisce il textarea standard di osservazione
-PC/NC per evitare doppio input sulla stessa colonna. Nel PDF è sempre stampato,
-indipendentemente dall'esito della domanda.
+**Multi-impresa (Sprint 9.1, completato):** SEZ-08 supporta ora N imprese
+appaltatrici/subappaltatrici/lavoratori autonomi per visita, ciascuna con le
+proprie 8 risposte indipendenti su D-08-002...D-08-009. Tabelle dedicate
+`imprese_appalto` e `risposte_imprese_appalto` (migration 012). Discriminatore
+v1/v1.1: marker `multi_impresa: true` nel template snapshot — le visite create
+prima di questo sprint (template v3) restano sul modello v1 a domande singole,
+immutabili per snapshot; le visite create da template v4 in poi usano il
+modello multi-impresa. Non convertire mai retroattivamente uno snapshot v3.
 
-> ⚠️ Questo campo è **in fase di estensione** — vedi Sprint 9.1 più sotto.
-> L'elenco imprese come testo libero unico è un'implementazione transitoria,
-> da sostituire con il modello multi-impresa strutturato.
+Il vecchio campo testo libero D-08-003 ("elenco imprese" su
+`risposte.osservazione_evidenza`) è stato **rimosso** dal modello multi-impresa:
+l'impresa è ora un'entità anagrafica propria (ragione sociale + tipo), non più
+un testo libero. Resta solo nei 3 verbali bozza legacy v1 esistenti al momento
+della migrazione, che mantengono il comportamento originale.
+
+**Obbligatorietà azione correttiva (per-impresa):** per le risposte
+per-impresa, `azione_correttiva` è obbligatoria su esito NC/PC esattamente
+come per le domande standard — nessuna eccezione di rigore per il modello
+multi-impresa. Una domanda con NC/PC senza azione correttiva valorizzata
+conta come mancante ai fini della completezza sezione.
 
 ---
 
@@ -232,10 +244,45 @@ Il frontend non è mai fonte di verità per permessi, stati o identità utente.
 
 ---
 
-## Anagrafica clienti (aziende)
+## Anagrafica clienti (aziende) e sedi — aggiornato Sprint 10
 
-- Implementata: CRUD clienti e sedi (Sprint 4), CRUD completo + dashboard reale pianificato Sprint 10
-- Ogni azienda ha il proprio archivio verbali (lista con stati, azioni contestuali, KPI sintetici)
+**Modello dati confermato (verificato su schema live, Sprint 10):**
+
+- **Sede legale**: 1:1 con il cliente, campi sul record `clienti` stesso
+  (non tabella separata — relazione 1:1, normalizzarla sarebbe inutile).
+  Campi già presenti da prima di Sprint 10: `ragione_sociale`,
+  `partita_iva`, `codice_fiscale`, `indirizzo_sede_legale`, `citta`, `cap`,
+  `provincia`, `referente_principale`, `telefono_referente`,
+  `email_referente`. Editabile in UI da Sprint 10 (form "Modifica cliente").
+- **Sedi operative**: 1:N con il cliente, tabella `sedi` dedicata. Campi:
+  `nome`, `indirizzo`, `citta`, `cap`, `provincia`, `referente_sede`,
+  `telefono_referente`, `note`, `attiva` (soft-delete), `principale`
+  (bool, aggiunto migration 013 — preselezione di default su nuova visita,
+  unicità garantita a livello applicativo, non indice parziale, per evitare
+  violazioni transitorie tra due UPDATE in sequenza).
+- `visite.sede_id` è FK verso `sedi(id)`, `NOT NULL` — non testo libero.
+  Nessuna sede o cliente può essere eliminato fisicamente se esistono
+  visite collegate: solo soft-delete (`attiva = false`), per preservare
+  l'integrità storica dei verbali.
+
+**CRUD completo (Sprint 10):** creazione/modifica/soft-delete sedi
+operative, marcatura sede principale, dashboard reale con KPI di studio.
+
+**KPI di studio (dashboard, Sprint 10):** esposti via due RPC
+`SECURITY INVOKER` (non `DEFINER` — la regola `SET search_path=''` del
+progetto si applica storicamente alle funzioni `SECURITY DEFINER`, dove un
+search_path manipolabile è un vettore di privilege escalation; su
+`SECURITY INVOKER` il rischio è strutturalmente diverso). Corpo di
+entrambe le funzioni interamente schema-qualificato (`public.*`) su ogni
+riferimento a tabella utente, verificato riga per riga prima del commit.
+`dashboard_kpi()`: clienti attivi, verbali totali, NC rilevate aggregate
+(somma di NC standard + NC per-impresa SEZ-08 nei verbali `chiuso` — **non**
+un conteggio di "NC da risolvere", quello arriva con NC tracking Sprint 13;
+disclaimer esplicito in UI). `dashboard_clienti()`: rollup per cliente
+(numero sedi, numero verbali, ultimo sopralluogo).
+
+**Multi-tenancy:** non implementata, non in scope. Single-tenant, Studio
+Bilello unico utente. Nessuna selezione studio in UI.
 
 ---
 
@@ -262,9 +309,9 @@ Sequenza atomica server-side per azienda (RPC, introdotta Sprint 6).
 | Sprint 8 | Campi testo espandibili, campo osservazione evidenza, fix layout PDF (rilievi + pagine vuote) | ✅ Completato |
 | PRE-GOLIVE | Rename cliente test → "Pane Pizza Srl", utente reale parametrico, verifica end-to-end | ✅ Completato |
 | **GO-LIVE** | **Produzione attiva, cliente reale** | ✅ **30/06/2026** |
-| Sprint 9 | SEZ-08 Art. 26 Appalti/DUVRI, motore logica condizionale a livello sezione (migration 011) | ✅ Completato — commit in corso |
-| **Sprint 9.1** | **Multi-impresa in SEZ-08: elenco strutturato imprese appaltatrici/subappaltatrici/lav. autonomi, 8 domande di controllo ripetute per impresa** | 🔄 **In progettazione — vedi sezione dedicata sotto** |
-| Sprint 10 | CRUD completo clienti/sedi, UI refinement, dashboard reale | ⏳ Pianificato |
+| Sprint 9 | SEZ-08 Art. 26 Appalti/DUVRI, motore logica condizionale a livello sezione (migration 011) | ✅ Completato |
+| Sprint 9.1 | Multi-impresa in SEZ-08: tabelle dedicate `imprese_appalto`/`risposte_imprese_appalto`, UI lista+scheda, PDF per-impresa, discriminatore template v4 (migration 012) | ✅ Completato |
+| Sprint 10 | CRUD completo sedi operative (distinte da sede legale su `clienti`), dashboard reale con KPI di studio via RPC, ricerca clienti (migration 013) | ✅ Completato |
 | Sprint 11 | Duplica e Crea sostitutivo (genealogia verbali) | ⏳ Pianificato |
 | Sprint 12 | Motore checklist evoluto: nominativi dinamici per domanda, scadenze automatiche da data verifica | ⏳ Pianificato (dopo periodo pilota) |
 | Sprint 13 | NC tracking: scadenze azioni correttive, solleciti | ⏳ Pianificato |
@@ -276,60 +323,30 @@ Sequenza atomica server-side per azienda (RPC, introdotta Sprint 6).
 
 ---
 
-## Sprint 9.1 — Multi-impresa SEZ-08 (decisione architetturale, in attesa di esecuzione)
+## Sprint 9.1 — Multi-impresa SEZ-08 — ✅ COMPLETATO
 
-**Problema:** l'implementazione Sprint 9 di SEZ-08 tratta le 8 domande di controllo
-(tesserini, DUVRI, idoneità tecnico-professionale, ecc.) come uniche per l'intera
-sezione, con l'elenco imprese relegato a testo libero su D-08-003. Nella realtà
-operativa possono essere presenti **N imprese appaltatrici/subappaltatrici/lavoratori
-autonomi** (tipicamente 1 a 6+, variabile), ciascuna con un proprio esito potenzialmente
-diverso sulle stesse 8 domande (es. tesserini OK per l'impresa A, NC per l'impresa B).
+**Implementato.** Vedi `docs/SPECIFICHE_FUNZIONALI.md` sezione 10 per il
+dettaglio completo delle decisioni e dell'implementazione verificata
+(migration 012, scenari di test A-E, discriminatore template v4).
 
-**Decisione confermata da Vincenzo (sessione Claude.ai, 30/06/2026):**
+Riepilogo essenziale per riferimento rapido:
 
-1. Le 8 domande di controllo (D-08-002...D-08-009) si ripetono **integralmente per
-   ogni impresa** inserita — non esiste una via di mezzo con alcune domande uniche
-   a livello sezione.
-2. La domanda filtro D-08-001 resta **unica a livello di sezione** (non per impresa).
-3. Per ogni impresa si raccolgono: **ragione sociale** + **tipo** (select:
-   appaltatrice / subappaltatrice / lavoratore autonomo — distinzione rilevante
-   anche ai fini degli obblighi Art. 26).
-4. Il numero di imprese è **variabile e potenzialmente alto (6+)** → la UI deve
-   essere lista compatta (nome impresa + stato sintetico, es. "Alfa Impianti —
-   2 NC") che apre una scheda dedicata per impresa, non uno scroll lineare con
-   tutte le domande di tutte le imprese in sequenza. Pattern mobile-first coerente
-   col resto dell'app.
-5. Nel PDF: **sotto-sezione dedicata per ogni impresa**, con le 8 domande estese
-   per ciascuna (non una tabella riassuntiva).
-
-**Architettura dati decisa:**
-- Nuova tabella `imprese_appalto` (id, visita_id, ragione_sociale, tipo_impresa, ordine)
-- Nuova tabella `risposte_imprese_appalto` (id, impresa_id, domanda_id, esito,
-  osservazione, azione_correttiva) — **non** riusare `risposte` con una colonna
-  `impresa_id` nullable: terrebbe `risposte` semanticamente sporca (1 riga = 1
-  risposta standard di sezione) per un caso che riguarda solo SEZ-08.
-- Il motore di collasso/espansione di sezione (Sprint 9) **resta invariato e viene
-  riusato** per la domanda filtro D-08-001. Cambia solo cosa succede quando la
-  sezione è espansa: invece di 8 domande singole, si genera un contenitore
-  "lista imprese" che produce N copie delle 8 domande.
-
-**Impatto su completezza verbale:** `completa.ts` deve essere esteso così che,
-a sezione espansa, la sezione SEZ-08 sia completa quando: almeno 1 impresa è
-stata inserita E per ogni impresa inserita tutte le 8 domande hanno risposta.
-
-**Impatto su riepilogo/rilievi conclusivi:** il conteggio NC/PC/NA deve aggregare
-su tutte le imprese (N×8 risposte), mantenendo nel PDF il dettaglio per impresa
-come da punto 5 sopra.
-
-**Pattern riusabile:** questo è il primo caso in SafeCheck di "blocco di domande
-ripetibile legato a un'entità anagrafica creata dal tecnico in campo" (diverso dai
-nominativi multi-tag di SEZ-01, che sono semplici liste di stringhe senza domande
-associate). Va costruito con un minimo di generalità di naming, senza
-sovra-ingegnerizzare per casi d'uso futuri non ancora richiesti.
-
-**Stato:** in attesa di prompt esecutivo dettagliato per Claude Code. Non ancora
-implementato. Il commit Sprint 9 (motore di collasso) procede comunque, separato
-e indipendente da questa estensione.
+- Tabelle dedicate `imprese_appalto` e `risposte_imprese_appalto` (no FK a
+  tabella `domande`, che non esiste — `domanda_id` è TEXT, coerente con
+  `risposte`).
+- Discriminatore v1/v1.1: marker `multi_impresa: true` su SEZ-08 nel
+  `template_master` v4. Visite su snapshot v3 (3 bozze legacy verificate al
+  momento della migrazione) restano sul modello a domande singole — mai
+  convertite retroattivamente.
+- Completezza: ≥1 impresa inserita e tutte le 8 domande risposte per ciascuna,
+  inclusa `azione_correttiva` obbligatoria su NC/PC (allineata alla regola
+  standard, nessuna eccezione per il modello multi-impresa).
+- UI: lista compatta + scheda dedicata per impresa (`SezioneAppaltiImprese.tsx`),
+  `DomandaCard.tsx` non duplicato — riusato con contesto sollevato in
+  `ChecklistClient.tsx`.
+- PDF: sotto-sezione estesa per ogni impresa, non tabella riassuntiva.
+- Motore di collasso/espansione (Sprint 9) invariato, riusato identico per
+  la domanda filtro D-08-001.
 
 ---
 
@@ -373,13 +390,16 @@ rimane in Fase 3/Fase 4. Non va anticipato.
 
 ---
 
-## Sicurezza — azione richiesta
+## Sicurezza — azione richiesta (NON ANCORA RISOLTA — priorità alta)
 
 ⚠️ **Due Personal Access Token Supabase risultano esposti in chat in chiaro durante
-sessioni precedenti** (prefissi `sbp_64fc8f…` e `sbp_78fcf1…`). **Entrambi devono
-essere ruotati** se non è già stato fatto. Non passare mai PAT o altre credenziali
-in chiaro in chat, né qui né con Claude Code: usare sempre variabili d'ambiente o
-gestori di credenziali.
+sessioni precedenti** (prefissi `sbp_64fc8f…` e `sbp_78fcf1…`). **Confermato non
+ancora ruotati al 30/06/2026, post Sprint 10** — Vincenzo ha scelto di procedere
+con lo sviluppo in parallelo, ma questa azione resta da chiudere quanto prima:
+ogni sprint che passa con il PAT attivo è una finestra di rischio aperta su un
+progetto Supabase che ora gestisce dati reali di un cliente (Pane Pizza Srl).
+Non passare mai PAT o altre credenziali in chiaro in chat, né qui né con Claude
+Code: usare sempre variabili d'ambiente o gestori di credenziali.
 
 ---
 
@@ -420,4 +440,4 @@ gestori di credenziali.
 
 ---
 
-*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-02, post Sprint 9 / pre Sprint 9.1)*
+*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-04, post Sprint 10)*
