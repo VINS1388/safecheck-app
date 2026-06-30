@@ -41,6 +41,7 @@ export interface VisitaRiepilogo {
   stato: StatoVisita;
   data_visita: string;
   numero_verbale: string | null;
+  sede_id: string;
   cliente_nome: string;
   sede_nome: string;
 }
@@ -222,7 +223,7 @@ export async function getVisiteByCliente(clienteId: string): Promise<VisitaRiepi
 
   const { data, error } = await supabase
     .from("visite")
-    .select(`id, stato, data_visita, numero_verbale, clienti ( ragione_sociale ), sedi ( nome )`)
+    .select(`id, stato, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome )`)
     .eq("cliente_id", clienteId)
     .order("data_visita", { ascending: false });
 
@@ -240,7 +241,7 @@ export async function getVisiteUtente(): Promise<VisitaRiepilogo[]> {
 
   const { data, error } = await supabase
     .from("visite")
-    .select(`id, stato, data_visita, numero_verbale, clienti ( ragione_sociale ), sedi ( nome )`)
+    .select(`id, stato, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome )`)
     .order("data_visita", { ascending: false });
 
   if (error || !data) return [];
@@ -254,6 +255,7 @@ function mapRiepilogo(v: VisitaConRelazioni): VisitaRiepilogo {
     stato: v.stato,
     data_visita: v.data_visita,
     numero_verbale: v.numero_verbale,
+    sede_id: v.sede_id,
     cliente_nome: v.clienti?.ragione_sociale ?? "—",
     sede_nome: v.sedi?.nome ?? "—",
   };

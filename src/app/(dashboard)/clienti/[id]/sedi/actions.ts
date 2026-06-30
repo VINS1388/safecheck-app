@@ -1,0 +1,64 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  aggiornaSede,
+  eliminaSede,
+  impostaSedePrincipale,
+} from "@/lib/db/queries/sedi";
+
+function opt(formData: FormData, key: string): string | null {
+  const v = String(formData.get(key) ?? "").trim();
+  return v ? v : null;
+}
+
+/** Modifica i dati di una sede operativa. */
+export async function aggiornaSedeAction(clienteId: string, sedeId: string, formData: FormData) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const indirizzo = String(formData.get("indirizzo") ?? "").trim();
+  const citta = String(formData.get("citta") ?? "").trim();
+  if (!nome || !indirizzo || !citta) {
+    throw new Error("Nome sede, indirizzo e città sono obbligatori.");
+  }
+
+  await aggiornaSede(sedeId, {
+    nome,
+    indirizzo,
+    citta,
+    cap: opt(formData, "cap"),
+    provincia: opt(formData, "provincia"),
+    referente_sede: opt(formData, "referente_sede"),
+    telefono_referente: opt(formData, "telefono_referente"),
+  });
+
+  revalidatePath(`/clienti/${clienteId}`);
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede aggiornata.")}`);
+}
+
+/** Soft-delete di una sede (bloccato se ha visite collegate). */
+export async function eliminaSedeAction(clienteId: string, sedeId: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const esito = await eliminaSede(sedeId);
+  revalidatePath(`/clienti/${clienteId}`);
+  if (!esito.ok) {
+    redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
+  }
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede eliminata.")}`);
+}
+
+/** Imposta la sede come principale per il cliente. */
+export async function impostaSedePrincipaleAction(clienteId: string, sedeId: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  await impostaSedePrincipale(clienteId, sedeId);
+  revalidatePath(`/clienti/${clienteId}`);
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede principale aggiornata.")}`);
+}

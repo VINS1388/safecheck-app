@@ -33,6 +33,7 @@ export async function creaSedeAction(formData: FormData) {
     cap: opt(formData, "cap"),
     provincia: opt(formData, "provincia"),
     referente_sede: opt(formData, "referente_sede"),
+    telefono_referente: opt(formData, "telefono_referente"),
   });
 
   revalidatePath(`/clienti/${clienteId}`);

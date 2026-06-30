@@ -306,6 +306,7 @@ export type Database = {
           indirizzo: string
           nome: string
           note: string | null
+          principale: boolean
           provincia: string | null
           referente_sede: string | null
           telefono_referente: string | null
@@ -321,6 +322,7 @@ export type Database = {
           indirizzo: string
           nome: string
           note?: string | null
+          principale?: boolean
           provincia?: string | null
           referente_sede?: string | null
           telefono_referente?: string | null
@@ -336,6 +338,7 @@ export type Database = {
           indirizzo?: string
           nome?: string
           note?: string | null
+          principale?: boolean
           provincia?: string | null
           referente_sede?: string | null
           telefono_referente?: string | null
@@ -786,6 +789,26 @@ export type Database = {
       assegna_numero_verbale: {
         Args: { p_anno?: number; p_visita_id: string }
         Returns: string
+      }
+      dashboard_kpi: {
+        Args: never
+        Returns: {
+          clienti_attivi: number
+          verbali_totali: number
+          nc_verbali_chiusi: number
+          ultimo_sopralluogo: string | null
+        }[]
+      }
+      dashboard_clienti: {
+        Args: never
+        Returns: {
+          id: string
+          ragione_sociale: string
+          citta: string | null
+          n_sedi: number
+          n_verbali: number
+          ultima_visita: string | null
+        }[]
       }
       get_ruolo_utente: {
         Args: never
