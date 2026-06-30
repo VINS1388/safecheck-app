@@ -84,8 +84,8 @@ Il template è composto da **64 domande totali**, suddivise in **8 sezioni opera
 | SEZ-07 | Ambienti di lavoro e attrezzature | 5 |
 | SEZ-08 | Appalti e contratti d'opera (Art. 26 / DUVRI) | 9 |
 
-`template_master` versione corrente: **4** (migration 012, Sprint 9.1 — marker `multi_impresa: true` su SEZ-08).
-Versione precedente 3 introdotta con migration 011, Sprint 9.
+`template_master` versione corrente: **6** (migration 016, Sprint 12.1 — 3 domande gate sorveglianza sanitaria in SEZ-01, ordine 4.1–4.3, campo data su D-01-016).
+Versioni precedenti: 5 (migration 015, Sprint 12), 4 (migration 012, Sprint 9.1), 3 (migration 011, Sprint 9).
 
 **Tipi di risposta validi:** `C` · `PC` · `NC` · `NV` · `NA`
 
@@ -139,6 +139,62 @@ per-impresa, `azione_correttiva` è obbligatoria su esito NC/PC esattamente
 come per le domande standard — nessuna eccezione di rigore per il modello
 multi-impresa. Una domanda con NC/PC senza azione correttiva valorizzata
 conta come mancante ai fini della completezza sezione.
+
+### SEZ-01 — Sotto-sezione sorveglianza sanitaria (Sprint 12.1) — ✅ IMPLEMENTATO
+
+**Nuovo pattern: gate per-domanda** (distinto dal collasso di sezione intera di SEZ-08).
+La domanda D-01-012 "Necessità di sorveglianza sanitaria" è la filtro per 3
+sotto-domande condizionali (D-01-014, D-01-015, D-01-016) aggiunte con migration 016:
+
+- **Aperte** su C/PC/NC (sorveglianza necessaria, verifiche obbligatorie)
+- **Collassate** su NA/NV (nessuna necessità, domande nascoste, non bloccano)
+- **Nascoste** se D-01-012 senza risposta (silenzio visivo, D-01-012 blocca da sola)
+
+Helper dedicato `domandaGateAttiva()` in `completa.ts` — **non tocca** il motore
+`sezioneCollassata()`/`domandaAttiva()` di SEZ-08 (due livelli diversi, due
+meccanismi distinti). `gate_collassa_su: ["NA","NV"]` è più generale del
+solo-NA di SEZ-08 — riusabile per altri gate futuri.
+
+D-01-016 include campo data (sopralluogo annuale MC) — solo dato strutturato,
+nessun calcolo scadenza (Sprint 13).
+
+Ordini frazionari 4.1–4.3 per collocare le sotto-domande senza rinumerare
+le domande SEZ-01 esistenti — **non modificare gli ordini esistenti**.
+
+Rilievi conclusivi: sotto-domanda collassata non conta come NA (solo la filtro),
+coerente col principio SEZ-08.
+
+**Modello dati nominativi SEZ-01 (modificato in Sprint 12):**
+I nominativi erano bare-string senza ID stabile (`["Mario Rossi"]`). Sprint
+12 li ha migrati al formato `[{id, nome}]` con un normalizer retrocompatibile
+che legge entrambi i formati. L'`id` è uno UUID client stabile che sopravvive
+al rename del nome. **Non tornare mai al formato bare-string** per i nuovi
+nominativi — il normalizer esiste per retrocompatibilità con i dati vecchi,
+non come pattern da usare in avanti.
+
+**MC (Medico Competente):** non genera domande di formazione in SEZ-03 —
+corretto per ragione normativa (art. 38 D.Lgs. 81/08: il MC ha propri
+titoli professionali, non viene "formato" dal datore di lavoro). Confermato
+che non esisteva nemmeno in v4. Non aggiungere una domanda MC in SEZ-03.
+
+**Le 8 figure che generano domande per-nominativo:** PREPOSTI, DIRIGENTI,
+DL, RSPP, ASPP, RLS, ANTINCENDIO, PRIMO_SOCCORSO.
+
+**Le 2 domande generiche che restano singole:** D-03-001 (Lavoratori —
+formazione collettiva, nessun nominativo individuale) e D-03-005 (DL-SPP —
+modalità organizzativa, non una persona distinta dal DL).
+
+**Architettura (vista derivata + risposte composite):**
+- Le domande SEZ-03 sono derivate a runtime dai nominativi correnti di
+  SEZ-01 — non sono righe fisse nel template per persona.
+- Le risposte riusano la tabella `risposte` con `domanda_id` composito
+  (`<D-03-0x>::<nominativoId>`). Questo dà gratis autosave, completezza,
+  PDF e Duplica/Sostitutivo (già funzionanti senza modifiche a Sprint 11).
+- Sincronizzazione live con SEZ-01: aggiunta nominativo → nuova domanda
+  appare; rimozione di nominativo con risposta già data → conferma esplicita
+  richiesta prima di eliminare.
+- Campo `data_verifica` per ogni domanda di formazione (solo campo dato,
+  nessun calcolo scadenza — Sprint 13/14).
 
 ---
 
@@ -357,7 +413,9 @@ Sequenza atomica server-side per azienda (RPC, introdotta Sprint 6).
 | Sprint 9.1 | Multi-impresa in SEZ-08: tabelle dedicate `imprese_appalto`/`risposte_imprese_appalto`, UI lista+scheda, PDF per-impresa, discriminatore template v4 (migration 012) | ✅ Completato |
 | Sprint 10 | CRUD completo sedi operative (distinte da sede legale su `clienti`), dashboard reale con KPI di studio via RPC, ricerca clienti (migration 013) | ✅ Completato |
 | Sprint 11 | Duplica e Crea sostitutivo (genealogia verbali, RPC `clona_visita` transazionale, migration 014) | ✅ Completato |
-| Sprint 12 | Motore checklist evoluto: nominativi dinamici per domanda, scadenze automatiche da data verifica | ⏳ Pianificato (dopo periodo pilota) |
+| Sprint 12 | SEZ-03 formazione per-nominativo: vista derivata da SEZ-01, ID stabili nominativi {id,nome}, normalizer retrocompatibile, campo data_verifica (migration 015) | ✅ Completato |
+| Sprint 12.1 | Sotto-sezione sorveglianza sanitaria condizionale in SEZ-01 (gate per-domanda, migration 016) | ✅ Completato |
+| **Sprint 12.2** | **SEZ-03 logica DL/RSPP: stessa persona → domanda DL-SPP combinata; persone diverse → domande separate** | 🔄 **In progettazione** |
 | Sprint 13 | NC tracking: scadenze azioni correttive, solleciti | ⏳ Pianificato |
 | Sprint 14 | Pianificazione visite (contratto N visite/anno per sede, alert scadenze; poi menu centralizzato pianificazione tecnici) | ⏳ Pianificato |
 | Sprint 15 | Sopralluogo planimetrico (stile PlanRadar, pin su planimetria) | ⏳ Pianificato |
@@ -484,4 +542,4 @@ Code: usare sempre variabili d'ambiente o gestori di credenziali.
 
 ---
 
-*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-05, post Sprint 11 + fix stato_verbale)*
+*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-07, post Sprint 12.1 / Sprint 12.2 in progettazione)*
