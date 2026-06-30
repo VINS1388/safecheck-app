@@ -42,7 +42,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Verificare l''individuazione del Datore di Lavoro ai sensi dell''art. 2 D.Lgs. 81/2008 e la presenza delle relative deleghe di funzioni ai sensi dell''art. 16, ove conferite.",
+          "descrizione": "Verificare l''individuazione del Datore di Lavoro ai sensi dell''art. 2 D.Lgs. 81/2008 e la presenza delle relative deleghe di funzioni ai sensi dell''art. 16, ove conferite.",
           "rif_normativo": "Art. 2 e art. 16 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
@@ -85,7 +85,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Verificare se dalla valutazione dei rischi (DVR) emerge l''obbligo di sottoporre i lavoratori a sorveglianza sanitaria ai sensi dell''art. 41 D.Lgs. 81/2008.",
+          "descrizione": "Verificare se dalla valutazione dei rischi (DVR) emerge l''obbligo di sottoporre i lavoratori a sorveglianza sanitaria ai sensi dell''art. 41 D.Lgs. 81/2008.",
           "rif_normativo": "Art. 41 D.Lgs. 81/2008"
         },
         {
@@ -109,7 +109,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Verificare se vi sono le condizioni per l''elezione del RLS. In assenza di elezione, registrare il fatto e verificare l''eventuale obbligo di comunicazione all''INAIL tramite il sistema RLST territoriale.",
-          "note_tecnico": "Verificare la presenza della documentazione relativa all''elezione o designazione del Rappresentante dei Lavoratori per la Sicurezza ai sensi degli artt. 47-48 D.Lgs. 81/2008.",
+          "descrizione": "Verificare la presenza della documentazione relativa all''elezione o designazione del Rappresentante dei Lavoratori per la Sicurezza ai sensi degli artt. 47-48 D.Lgs. 81/2008.",
           "rif_normativo": "Artt. 47-48 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
@@ -124,7 +124,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Verificare l''avvenuto invio del nominativo del Rappresentante dei Lavoratori per la Sicurezza tramite il portale telematico INAIL, come previsto dalla normativa vigente.",
+          "descrizione": "Verificare l''avvenuto invio del nominativo del Rappresentante dei Lavoratori per la Sicurezza tramite il portale telematico INAIL, come previsto dalla normativa vigente.",
           "rif_normativo": "Art. 18 c.1 lett. aa D.Lgs. 81/2008"
         },
         {
@@ -162,7 +162,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Verificare l''individuazione e la formalizzazione dell''incarico dei preposti, anche di fatto, ai sensi dell''art. 19 e dell''art. 18 comma 1 lett. b-bis D.Lgs. 81/2008.",
+          "descrizione": "Verificare l''individuazione e la formalizzazione dell''incarico dei preposti, anche di fatto, ai sensi dell''art. 19 e dell''art. 18 comma 1 lett. b-bis D.Lgs. 81/2008.",
           "rif_normativo": "Art. 19 e art. 18 c.1 lett. b-bis D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
@@ -177,7 +177,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Verificare la presenza di deleghe di funzioni in materia di sicurezza conferite ai dirigenti con poteri gerarchici e funzionali, ai sensi dell''art. 16 D.Lgs. 81/2008, ove presenti.",
+          "descrizione": "Verificare la presenza di deleghe di funzioni in materia di sicurezza conferite ai dirigenti con poteri gerarchici e funzionali, ai sensi dell''art. 16 D.Lgs. 81/2008, ove presenti.",
           "rif_normativo": "Art. 16 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
@@ -556,7 +556,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Presentare la denuncia dell''impianto di messa a terra all''INAIL (ex ISPESL) ai sensi del DPR 462/2001 e conservarne copia in azienda.",
-          "note_tecnico": "Verificare la presenza della denuncia dell''impianto di messa a terra all''INAIL (ex ISPESL), come previsto dal DPR 462/2001.",
+          "descrizione": "Verificare la presenza della denuncia dell''impianto di messa a terra all''INAIL (ex ISPESL), come previsto dal DPR 462/2001.",
           "rif_normativo": "DPR 462/2001"
         },
         {
@@ -566,7 +566,7 @@ INSERT INTO template_master (
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Far eseguire la verifica periodica dell''impianto di messa a terra da organismo abilitato nei tempi previsti dal DPR 462/2001 (biennale ordinario; annuale negli ambienti a maggior rischio di incendio o esplosione).",
-          "note_tecnico": "Verificare l''esecuzione della verifica periodica dell''impianto di messa a terra nei tempi previsti (biennale per ambienti ordinari, annuale per ambienti a maggior rischio in caso di incendio o esplosione, ai sensi del DPR 462/2001).",
+          "descrizione": "Verificare l''esecuzione della verifica periodica dell''impianto di messa a terra nei tempi previsti (biennale per ambienti ordinari, annuale per ambienti a maggior rischio in caso di incendio o esplosione, ai sensi del DPR 462/2001).",
           "rif_normativo": "DPR 462/2001"
         },
         {

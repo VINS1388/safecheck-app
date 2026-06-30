@@ -57,9 +57,11 @@ export default function DomandaCard({
         )}
       </p>
 
-      {domanda.note_tecnico && (
+      {/* Descrizione normativa visibile al tecnico. Fonte primaria: `descrizione`;
+          fallback su `note_tecnico` per domande non ancora migrate e snapshot già congelati. */}
+      {(domanda.descrizione?.trim() || domanda.note_tecnico?.trim()) && (
         <p className="mt-1 text-xs leading-relaxed text-gray-500">
-          {domanda.note_tecnico}
+          {domanda.descrizione?.trim() || domanda.note_tecnico}
         </p>
       )}
 

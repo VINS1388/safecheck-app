@@ -17,11 +17,12 @@ export interface CampoExtraTemplate {
 export interface DomandaTemplate {
   id: string; // es. "D-01-001"
   testo: string;
+  descrizione?: string; // testo esplicativo normativo, VISIBILE in UI sotto la domanda; non stampato nel PDF
   ordine: number;
   obbligatoria: boolean;
   tipo_risposta: string; // "conformita_5" | "qualita_4"
   correzione_default?: string;
-  note_tecnico?: string; // guida tecnica interna (anche descrizione domanda); mai stampata nel PDF
+  note_tecnico?: string; // guida tecnica interna (legacy/fallback UI); mai stampata nel PDF
   rif_normativo?: string; // riferimento normativo interno; mai stampato nel PDF
   campo_extra?: CampoExtraTemplate;
 }
