@@ -1,5 +1,5 @@
 // Test Sprint 12.1 — sotto-sezione sorveglianza sanitaria (gate) in SEZ-01.
-// In-memory (nessuna scrittura su DB): usa il template v6 reale (read-only) e
+// In-memory (nessuna scrittura su DB): usa il template v7 reale (read-only) e
 // le funzioni reali (domandaGateAttiva, rispostaCompleta, sezioneCollassata,
 // generaVerbale).
 //
@@ -40,7 +40,9 @@ await c.end();
 const template = rows[0].struttura_json;
 const sez01 = template.sezioni.find((s) => s.id === "SEZ-01");
 const GATE = "D-01-012";
-const SUB = ["D-01-014", "D-01-015", "D-01-016"];
+// Migration 017: la nomina MC (D-01-002) è entrata nel blocco gate come prima
+// domanda condizionale, quindi le sotto-domande gate sono 4.
+const SUB = ["D-01-002", "D-01-014", "D-01-015", "D-01-016"];
 
 let fail = false;
 const check = (name, cond, extra = "") => {
@@ -49,9 +51,10 @@ const check = (name, cond, extra = "") => {
 };
 
 const sub014 = sez01.domande.find((d) => d.id === "D-01-014");
-check("3 domande gate presenti (gated_by=D-01-012)", sez01.domande.filter((d) => d.gated_by === GATE).length === 3);
+check("4 domande gate presenti (gated_by=D-01-012)", sez01.domande.filter((d) => d.gated_by === GATE).length === 4);
+check("D-01-002 (nomina MC) è gated da D-01-012", sez01.domande.find((d) => d.id === "D-01-002")?.gated_by === GATE);
 check("D-01-016 ha campo_data", sez01.domande.find((d) => d.id === "D-01-016")?.campo_data === true);
-check("template v6", template.versione === 6);
+check("template v7", template.versione === 7);
 
 // Valutazione completezza SEZ-01 (replica logica route, con gate).
 function valutaSez01(risp) {
@@ -94,10 +97,10 @@ console.log("\n── SCENARIO A — filtro = NC (aperta) ──");
   check("gate attivo con NC", aperta === true);
   const risp = baseSez01({ esito: "NC", azione: "Predisporre sorveglianza.", osservazione: "", dataVerifica: "" });
   const v1 = valutaSez01(risp);
-  check("3 sub non risposte → obbligatorieMancanti = 3, bloccato", v1.obbligatorieMancanti === 3 && v1.bloccato, `mancanti=${v1.obbligatorieMancanti}`);
+  check("4 sub non risposte → obbligatorieMancanti = 4, bloccato", v1.obbligatorieMancanti === 4 && v1.bloccato, `mancanti=${v1.obbligatorieMancanti}`);
   for (const id of SUB) risp[id] = { esito: "C", azione: "", osservazione: "", dataVerifica: "" };
   const v2 = valutaSez01(risp);
-  check("3 sub risposte → non bloccato", !v2.bloccato && v2.obbligatorieMancanti === 0);
+  check("4 sub risposte → non bloccato", !v2.bloccato && v2.obbligatorieMancanti === 0);
 }
 
 // ── SCENARIO B — filtro NA: collassata, 3 assenti, non blocca, PDF senza ─────
@@ -137,6 +140,7 @@ console.log("\n── SCENARIO D — NC senza azione blocca ──");
   const risp = baseSez01(
     { esito: "C", azione: "", osservazione: "", dataVerifica: "" },
     {
+      "D-01-002": { esito: "C", azione: "", osservazione: "", dataVerifica: "" },
       "D-01-014": { esito: "NC", azione: "", osservazione: "", dataVerifica: "" },
       "D-01-015": { esito: "C", azione: "", osservazione: "", dataVerifica: "" },
       "D-01-016": { esito: "C", azione: "", osservazione: "", dataVerifica: "" },

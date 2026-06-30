@@ -71,7 +71,15 @@ export default function DomandaCard({
   const campoTestoLibero = domanda.campo_extra?.tipo === "testo_libero";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div
+      className={cn(
+        "rounded-xl border border-gray-200 bg-white p-4 shadow-sm",
+        // Domanda condizionale (gated): accento amber sul bordo sinistro +
+        // indentazione + sfondo tenue, per percepire il raggruppamento sotto la
+        // domanda filtro. Puramente visivo: nessun impatto su logica/completezza/PDF.
+        domanda.gated_by && "ml-3 border-l-4 border-l-amber-400 bg-amber-50/30"
+      )}
+    >
       <p className="text-sm font-medium leading-snug text-gray-900">
         {domanda.testo}
         {domanda.obbligatoria && (

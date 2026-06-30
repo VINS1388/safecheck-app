@@ -1,5 +1,5 @@
 // Test Sprint 12.2 — SEZ-03 logica DL/RSPP. In-memory (nessuna scrittura su
-// DB): usa il template v6 reale (read-only) e le funzioni reali (formazione.ts:
+// DB): usa il template v7 reale (read-only) e le funzioni reali (formazione.ts:
 // istanzeFormazione, genericheFormazione, dlCoincideRspp; completa.ts:
 // completezzaFormazione; generaVerbale).
 //
@@ -70,9 +70,9 @@ const idsAttivi = (n) => istanzeFormazione(sez03, norm(n)).map((i) => i.composit
 const istanze = (n) => istanzeFormazione(sez03, norm(n));
 const generiche = (n) => genericheFormazione(sez03, norm(n)).map((d) => d.id);
 
-// ── STRUTTURA — precondizioni del template v6 ───────────────────────────────
+// ── STRUTTURA — precondizioni del template v7 ───────────────────────────────
 console.log("── STRUTTURA — precondizioni template ──");
-check("template v6", template.versione === 6);
+check("template v7", template.versione === 7);
 check("SEZ-03 ha marker formazione_per_nominativo", sez03.formazione_per_nominativo === true);
 check("esiste domanda figura DL", Boolean(Q_DL), `${Q_DL}`);
 check("esiste domanda figura RSPP", Boolean(Q_RSPP), `${Q_RSPP}`);
