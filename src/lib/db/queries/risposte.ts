@@ -8,6 +8,7 @@ export interface RispostaSalvata {
   sezione_id: string;
   valore: EsitoRisposta | null;
   azione_correttiva: string | null;
+  osservazione_evidenza: string | null;
   osservazioni: string | null;
   campo_extra: unknown | null;
 }
@@ -18,6 +19,7 @@ export interface SalvaRispostaInput {
   sezioneId: string;
   valore: EsitoRisposta | null;
   azioneCorrettiva: string | null;
+  osservazioneEvidenza?: string | null;
   osservazioni?: string | null;
 }
 
@@ -37,6 +39,7 @@ export async function salvaRisposta(input: SalvaRispostaInput): Promise<void> {
         sezione_id: input.sezioneId,
         valore: input.valore,
         azione_correttiva: input.azioneCorrettiva,
+        osservazione_evidenza: input.osservazioneEvidenza ?? null,
         osservazioni: input.osservazioni ?? null,
         aggiornata_il: new Date().toISOString(),
       },
@@ -81,7 +84,9 @@ export async function getRisposteByVisita(visitaId: string): Promise<RispostaSal
 
   const { data, error } = await supabase
     .from("risposte")
-    .select("domanda_id, sezione_id, valore, azione_correttiva, osservazioni, campo_extra")
+    .select(
+      "domanda_id, sezione_id, valore, azione_correttiva, osservazione_evidenza, osservazioni, campo_extra"
+    )
     .eq("visita_id", visitaId);
 
   if (error || !data) return [];

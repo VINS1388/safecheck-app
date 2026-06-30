@@ -14,6 +14,7 @@ import NominativiSEZ01 from "./NominativiSEZ01";
 interface Entry {
   valore: EsitoRisposta | null;
   azione: string;
+  osservazioneEvidenza: string;
   osservazioni: string;
   sezioneId: string;
 }
@@ -65,7 +66,13 @@ export default function ChecklistClient({
     const map: Record<string, Entry> = {};
     for (const sez of sezioni) {
       for (const d of sez.domande) {
-        map[d.id] = { valore: null, azione: "", osservazioni: "", sezioneId: sez.id };
+        map[d.id] = {
+          valore: null,
+          azione: "",
+          osservazioneEvidenza: "",
+          osservazioni: "",
+          sezioneId: sez.id,
+        };
       }
     }
     for (const r of risposteIniziali) {
@@ -73,6 +80,7 @@ export default function ChecklistClient({
       map[r.domanda_id] = {
         valore: r.valore,
         azione: r.azione_correttiva ?? "",
+        osservazioneEvidenza: r.osservazione_evidenza ?? "",
         osservazioni: r.osservazioni ?? "",
         sezioneId: r.sezione_id,
       };
@@ -106,6 +114,9 @@ export default function ChecklistClient({
       sezioneId: entry.sezioneId,
       valore: entry.valore,
       azioneCorrettiva: entry.azione.trim() ? entry.azione : null,
+      osservazioneEvidenza: entry.osservazioneEvidenza.trim()
+        ? entry.osservazioneEvidenza
+        : null,
       osservazioni: entry.osservazioni.trim() ? entry.osservazioni : null,
     });
     setSalvataggio(res.ok ? "saved" : "error");
@@ -116,6 +127,7 @@ export default function ChecklistClient({
     const corrente = risposte[domandaId] ?? {
       valore: null,
       azione: "",
+      osservazioneEvidenza: "",
       osservazioni: "",
       sezioneId,
     };
@@ -243,6 +255,7 @@ export default function ChecklistClient({
                   domanda={d}
                   valore={entry?.valore ?? null}
                   azioneCorrettiva={entry?.azione ?? ""}
+                  osservazioneEvidenza={entry?.osservazioneEvidenza ?? ""}
                   osservazioni={entry?.osservazioni ?? ""}
                   disabled={chiusa}
                   onValore={(v) => {
@@ -261,6 +274,9 @@ export default function ChecklistClient({
                     aggiorna(d.id, sezione.id, patch);
                   }}
                   onAzione={(t) => aggiorna(d.id, sezione.id, { azione: t })}
+                  onOsservazioneEvidenza={(t) =>
+                    aggiorna(d.id, sezione.id, { osservazioneEvidenza: t })
+                  }
                   onMotivazione={(t) => aggiorna(d.id, sezione.id, { osservazioni: t })}
                 />
               );

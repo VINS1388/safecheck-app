@@ -5,6 +5,7 @@ import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI } from "@/types";
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
   azione_correttiva: string | null;
+  osservazione_evidenza: string | null;
   osservazioni: string | null;
 }
 
@@ -214,12 +215,26 @@ function renderNominativi(doc: Doc, nominativi: Nominativi): void {
   doc.moveDown(0.6);
 }
 
+// Altezza stimata di "intestazione sezione + prima domanda": sotto questa
+// soglia non vale la pena iniziare una sezione in fondo alla pagina.
+const SOGLIA_NUOVA_SEZIONE = 140;
+
 // ── Sezioni ──────────────────────────────────────────────────────────────
 function renderSezioni(doc: Doc, dati: VerbaleData): void {
   const sezioni = [...dati.template.sezioni].sort((a, b) => a.ordine - b.ordine);
 
-  for (const sez of sezioni) {
-    doc.addPage();
+  sezioni.forEach((sez, idx) => {
+    // La prima sezione inizia sempre su una nuova pagina (dopo la copertina).
+    // Le successive continuano sulla pagina corrente se c'è spazio per
+    // l'intestazione + la prima domanda, altrimenti vanno a nuova pagina:
+    // così si evitano pagine semi-vuote.
+    if (idx === 0) {
+      doc.addPage();
+    } else {
+      doc.moveDown(0.6);
+      assicuraSpazio(doc, SOGLIA_NUOVA_SEZIONE);
+    }
+    doc.x = MARGINE;
 
     doc
       .fillColor(BRAND)
@@ -274,6 +289,18 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
           });
       }
 
+      // Osservazione / descrizione evidenza (opzionale) per NC / PC
+      if ((esito === "NC" || esito === "PC") && r?.osservazione_evidenza) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Osservazione: ${r.osservazione_evidenza}`, {
+            width: larghezzaContenuto(doc),
+          });
+      }
+
       // Motivazione per NV / NA
       if ((esito === "NV" || esito === "NA") && r?.osservazioni) {
         doc.moveDown(0.1);
@@ -290,18 +317,45 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
       rigaSottile(doc);
       doc.moveDown(0.5);
     }
-  }
+  });
+}
+
+// Box "totale" con numero grande e label sotto (es. "28" / "NC totali").
+function boxTotale(
+  doc: Doc,
+  x: number,
+  y: number,
+  w: number,
+  numero: number,
+  label: string,
+  colore: string
+): void {
+  const h = 56;
+  doc.lineWidth(1).strokeColor("#e5e7eb").roundedRect(x, y, w, h, 6).stroke();
+  doc
+    .fillColor(colore)
+    .font("Helvetica-Bold")
+    .fontSize(24)
+    .text(String(numero), x, y + 10, { width: w, align: "center" });
+  doc
+    .fillColor(GRIGIO)
+    .font("Helvetica-Bold")
+    .fontSize(8)
+    .text(label, x, y + 40, { width: w, align: "center" });
 }
 
 // ── Rilievi conclusivi ───────────────────────────────────────────────────
 function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
-  doc.addPage();
+  // Va a nuova pagina solo se il blocco (titolo + tabella + totali) non entra
+  // nello spazio rimanente: evita una pagina dedicata quasi vuota.
+  assicuraSpazio(doc, 300);
+  doc.x = MARGINE;
 
   doc
     .fillColor(BRAND)
     .font("Helvetica-Bold")
     .fontSize(16)
-    .text("Rilievi conclusivi");
+    .text("Rilievi conclusivi", MARGINE, doc.y);
   doc.moveDown(0.8);
 
   // Tabella riepilogativa
@@ -354,34 +408,46 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
     doc.moveDown(0.4);
   }
 
+  // IMPORTANTE: le celle sopra usano coordinate x esplicite e lasciano doc.x
+  // sull'ultima colonna. Va riportato al margine, altrimenti il testo seguente
+  // verrebbe mandato a capo carattere per carattere in una colonna larga ~42px.
+  doc.x = MARGINE;
   doc.moveDown(0.5);
   riga(doc);
   doc.moveDown(0.8);
 
-  // Totali in evidenza
-  doc.font("Helvetica-Bold").fontSize(12);
-  doc.fillColor(COLORE_ESITO.NC).text(`Non conformità (NC) totali: ${totNC}`);
-  doc.moveDown(0.2);
-  doc
-    .fillColor(COLORE_ESITO.PC)
-    .text(`Parzialmente conformi (PC) totali: ${totPC}`);
+  // Totali come due box affiancati: numero grande + label.
+  assicuraSpazio(doc, 70);
+  const yBox = doc.y;
+  const boxW = 150;
+  const gap = 16;
+  boxTotale(doc, MARGINE, yBox, boxW, totNC, "NC totali", COLORE_ESITO.NC);
+  boxTotale(doc, MARGINE + boxW + gap, yBox, boxW, totPC, "PC totali", COLORE_ESITO.PC);
+  doc.x = MARGINE;
+  doc.y = yBox + 64;
 
   // Note finali
   const note = dati.visita.note_finali_visita?.trim();
   if (note) {
-    doc.moveDown(1.2);
-    doc.fillColor(NERO).font("Helvetica-Bold").fontSize(11).text("Note finali");
+    doc.moveDown(0.6);
+    assicuraSpazio(doc, 60);
+    doc
+      .fillColor(NERO)
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text("Note finali", MARGINE, doc.y);
     doc.moveDown(0.3);
     doc
       .font("Helvetica")
       .fontSize(10)
       .fillColor(NERO)
-      .text(note, { width: larghezzaContenuto(doc) });
+      .text(note, MARGINE, doc.y, { width: larghezzaContenuto(doc) });
   }
 
-  // Firme
-  doc.moveDown(3);
+  // Firme — assicura spazio sufficiente prima del blocco.
+  doc.moveDown(2.5);
   assicuraSpazio(doc, 80);
+  doc.x = MARGINE;
   const meta = larghezzaContenuto(doc) / 2;
   const yFirme = doc.y;
   doc.lineWidth(0.7).strokeColor(GRIGIO);
@@ -406,7 +472,15 @@ function renderFooters(doc: Doc, dati: VerbaleData): void {
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
-    const y = doc.page.height - MARGINE + 5;
+
+    // Il footer va scritto nell'area del margine inferiore. Scrivere testo sotto
+    // `page.height - margins.bottom` farebbe aggiungere a PDFKit una pagina vuota
+    // per ogni footer: azzeriamo temporaneamente il margine inferiore di questa
+    // pagina per disabilitare l'auto-impaginazione, poi lo ripristiniamo.
+    const bottomOrig = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+
+    const y = doc.page.height - 35;
     doc.font("Helvetica").fontSize(8).fillColor(GRIGIO);
     doc.text(
       `${dati.visita.numero_verbale}  ·  Generato il ${dataGen}`,
@@ -420,6 +494,8 @@ function renderFooters(doc: Doc, dati: VerbaleData): void {
       y,
       { width: larghezzaContenuto(doc) / 2, align: "right", lineBreak: false }
     );
+
+    doc.page.margins.bottom = bottomOrig;
   }
 }
 

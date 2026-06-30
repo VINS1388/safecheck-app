@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { DomandaTemplate, EsitoRisposta } from "@/types";
+import AutoResizeTextarea from "./AutoResizeTextarea";
 
 const VALORI: EsitoRisposta[] = ["C", "PC", "NC", "NV", "NA"];
 
@@ -22,14 +23,20 @@ const STILE_SELEZIONATO: Record<EsitoRisposta, string> = {
   NA: "border-gray-400 bg-gray-400 text-white",
 };
 
+// Stile comune dei campi testo (padding 12px, font 16px su mobile via globals.css).
+const TEXTAREA_BASE =
+  "mt-1 w-full rounded-lg border px-3 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50";
+
 export interface DomandaCardProps {
   domanda: DomandaTemplate;
   valore: EsitoRisposta | null;
   azioneCorrettiva: string;
+  osservazioneEvidenza: string;
   osservazioni: string;
   disabled?: boolean;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
+  onOsservazioneEvidenza: (testo: string) => void;
   onMotivazione: (testo: string) => void;
 }
 
@@ -37,10 +44,12 @@ export default function DomandaCard({
   domanda,
   valore,
   azioneCorrettiva,
+  osservazioneEvidenza,
   osservazioni,
   disabled,
   onValore,
   onAzione,
+  onOsservazioneEvidenza,
   onMotivazione,
 }: DomandaCardProps) {
   const mostraAzione = valore === "NC" || valore === "PC";
@@ -96,27 +105,45 @@ export default function DomandaCard({
       </div>
 
       {mostraAzione && (
-        <div className="mt-3">
-          <label className="block text-xs font-medium text-gray-700">
-            Azione correttiva <span className="text-red-500" title="Obbligatoria">*</span>
-          </label>
-          <textarea
-            value={azioneCorrettiva}
-            onChange={(e) => onAzione(e.target.value)}
-            disabled={disabled}
-            rows={2}
-            placeholder="Descrivi l'azione correttiva da adottare…"
-            className={cn(
-              "mt-1 w-full resize-y rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50",
-              azioneCorrettiva.trim() ? "border-gray-300" : "border-red-300"
+        <>
+          <div className="mt-3">
+            <label className="block text-xs font-medium text-gray-700">
+              Azione correttiva <span className="text-red-500" title="Obbligatoria">*</span>
+            </label>
+            <AutoResizeTextarea
+              value={azioneCorrettiva}
+              onChange={(e) => onAzione(e.target.value)}
+              disabled={disabled}
+              minRows={3}
+              placeholder="Descrivi l'azione correttiva da adottare…"
+              className={cn(
+                TEXTAREA_BASE,
+                azioneCorrettiva.trim() ? "border-gray-300" : "border-red-300"
+              )}
+            />
+            {!azioneCorrettiva.trim() && !disabled && (
+              <p className="mt-1 text-xs text-red-500">
+                Campo obbligatorio per chiudere la domanda.
+              </p>
             )}
-          />
-          {!azioneCorrettiva.trim() && !disabled && (
-            <p className="mt-1 text-xs text-red-500">
-              Campo obbligatorio per chiudere la domanda.
-            </p>
-          )}
-        </div>
+          </div>
+
+          {/* Campo OPZIONALE: descrizione dell'evidenza osservata. Non blocca la chiusura. */}
+          <div className="mt-3">
+            <label className="block text-xs font-medium text-gray-700">
+              Osservazione / descrizione evidenza{" "}
+              <span className="font-normal text-gray-400">(opzionale)</span>
+            </label>
+            <AutoResizeTextarea
+              value={osservazioneEvidenza}
+              onChange={(e) => onOsservazioneEvidenza(e.target.value)}
+              disabled={disabled}
+              minRows={3}
+              placeholder="Descrivi cosa hai osservato durante il sopralluogo…"
+              className={cn(TEXTAREA_BASE, "border-gray-300")}
+            />
+          </div>
+        </>
       )}
 
       {mostraMotivazione && (
@@ -124,18 +151,18 @@ export default function DomandaCard({
           <label className="block text-xs font-medium text-gray-700">
             Motivazione <span className="text-red-500" title="Obbligatoria">*</span>
           </label>
-          <textarea
+          <AutoResizeTextarea
             value={osservazioni}
             onChange={(e) => onMotivazione(e.target.value)}
             disabled={disabled}
-            rows={2}
+            minRows={3}
             placeholder={
               valore === "NA"
                 ? "Perché non applicabile?"
                 : "Perché non verificato?"
             }
             className={cn(
-              "mt-1 w-full resize-y rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50",
+              TEXTAREA_BASE,
               osservazioni.trim() ? "border-gray-300" : "border-red-300"
             )}
           />

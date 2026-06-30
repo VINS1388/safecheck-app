@@ -10,6 +10,7 @@ export interface SalvaRispostaActionInput {
   sezioneId: string;
   valore: EsitoRisposta | null;
   azioneCorrettiva: string | null;
+  osservazioneEvidenza: string | null;
   osservazioni: string | null;
 }
 
@@ -34,6 +35,7 @@ export async function salvaRispostaAction(
       sezioneId: input.sezioneId,
       valore: input.valore,
       azioneCorrettiva: input.azioneCorrettiva,
+      osservazioneEvidenza: input.osservazioneEvidenza,
       osservazioni: input.osservazioni,
     });
     return { ok: true };

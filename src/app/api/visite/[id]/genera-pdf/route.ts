@@ -122,6 +122,7 @@ export async function POST(
         {
           esito: r.valore,
           azione_correttiva: r.azione_correttiva,
+          osservazione_evidenza: r.osservazione_evidenza,
           osservazioni: r.osservazioni,
         },
       ])
