@@ -81,14 +81,21 @@ export default async function VisitePage() {
 }
 
 function BadgeVerbale({ v }: { v: VisitaRiepilogo }) {
+  if (v.stato_verbale === "sostituito") {
+    return (
+      <span
+        className="inline-block rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-500"
+        title="Verbale sostituito — non più valido"
+      >
+        {v.numero_verbale} · Sostituito
+      </span>
+    );
+  }
   if (v.numero_verbale != null) {
     return (
-      <a
-        href={`/api/visite/${v.id}/download-pdf`}
-        className="font-medium text-[#1e3a5f] hover:underline"
-      >
+      <span className="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
         {v.numero_verbale}
-      </a>
+      </span>
     );
   }
   return (
@@ -99,21 +106,23 @@ function BadgeVerbale({ v }: { v: VisitaRiepilogo }) {
 }
 
 function Azioni({ v, chiusa }: { v: VisitaRiepilogo; chiusa: boolean }) {
+  // Verbale numerato (chiuso o sostituito): Leggi (riepilogo, da cui Duplica/
+  // Sostitutivo) + Scarica PDF. Bozza: Continua.
   if (chiusa) {
     return (
       <span className="inline-flex items-center gap-4">
+        <Link
+          href={`/visite/${v.id}/riepilogo`}
+          className="font-medium text-[#1e3a5f] hover:underline"
+        >
+          Leggi
+        </Link>
         <a
           href={`/api/visite/${v.id}/download-pdf`}
           className="font-medium text-[#1e3a5f] hover:underline"
         >
           Scarica PDF
         </a>
-        <span
-          title="Disponibile nello Sprint 8"
-          className="cursor-not-allowed text-gray-300"
-        >
-          Duplica
-        </span>
       </span>
     );
   }

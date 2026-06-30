@@ -26,7 +26,9 @@ export default async function ClienteDettaglioPage({
 
   const visite = await getVisiteByCliente(id);
   const bozze = visite.filter((v) => v.stato === "bozza").length;
-  const generati = visite.filter((v) => v.numero_verbale != null).length;
+  // "Verbali generati" = solo i verbali attualmente validi (chiusi), esclusi i
+  // sostituiti — stesso criterio del KPI "NC rilevate" della dashboard di studio.
+  const generati = visite.filter((v) => v.stato_verbale === "chiuso").length;
 
   // Conteggio visite per sede (dalla lista già caricata: nessuna query extra).
   const visitePerSede = new Map<string, number>();
