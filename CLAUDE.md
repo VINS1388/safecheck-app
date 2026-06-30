@@ -164,6 +164,17 @@ le domande SEZ-01 esistenti — **non modificare gli ordini esistenti**.
 Rilievi conclusivi: sotto-domanda collassata non conta come NA (solo la filtro),
 coerente col principio SEZ-08.
 
+> ⚠️ **FIX PENDENTE (non ancora eseguito):** la domanda esistente "È presente
+> e documentato l'atto di nomina del Medico Competente?" deve entrare nel
+> gate come prima domanda del blocco (prima di D-01-014), perché la nomina
+> MC è il prerequisito logico delle altre verifiche di sorveglianza.
+> Richiede migration 017 additiva (la domanda esiste già ma cambia
+> comportamento rispetto agli snapshot precedenti). Inoltre le 4 domande
+> del blocco (nomina + le 3 esistenti) necessitano di una differenziazione
+> grafica (bordo sinistro amber e/o indentazione) che le identifichi come
+> blocco condizionale unico — solo UI, nessuna modifica al PDF. Decisione
+> già presa in sessione Claude.ai, non ancora eseguita da Claude Code.
+
 **Modello dati nominativi SEZ-01 (modificato in Sprint 12):**
 I nominativi erano bare-string senza ID stabile (`["Mario Rossi"]`). Sprint
 12 li ha migrati al formato `[{id, nome}]` con un normalizer retrocompatibile
@@ -180,9 +191,9 @@ che non esisteva nemmeno in v4. Non aggiungere una domanda MC in SEZ-03.
 **Le 8 figure che generano domande per-nominativo:** PREPOSTI, DIRIGENTI,
 DL, RSPP, ASPP, RLS, ANTINCENDIO, PRIMO_SOCCORSO.
 
-**Le 2 domande generiche che restano singole:** D-03-001 (Lavoratori —
-formazione collettiva, nessun nominativo individuale) e D-03-005 (DL-SPP —
-modalità organizzativa, non una persona distinta dal DL).
+**Le 2 domande generiche che restano sempre singole:** D-03-001 (Lavoratori —
+formazione collettiva, nessun nominativo individuale). D-03-005 (DL-SPP) ha
+un comportamento ora condizionale — vedi Sprint 12.2 sotto.
 
 **Architettura (vista derivata + risposte composite):**
 - Le domande SEZ-03 sono derivate a runtime dai nominativi correnti di
@@ -195,6 +206,38 @@ modalità organizzativa, non una persona distinta dal DL).
   richiesta prima di eliminare.
 - Campo `data_verifica` per ogni domanda di formazione (solo campo dato,
   nessun calcolo scadenza — Sprint 13/14).
+
+### SEZ-03 — Logica DL/RSPP combinata (Sprint 12.2) — ✅ IMPLEMENTATO
+
+**Regola (art. 34 D.Lgs. 81/08):** se Datore di Lavoro e RSPP sono **la
+stessa persona** (confronto sempre su `id` stabile, mai sul nome — un
+omonimo non deve fondersi, un refuso non deve scindere), il percorso
+formativo è unico (DL-SPP), non DL + RSPP separati.
+
+- **Stesso id** → una sola istanza `D-03-005::<id>` ("Formazione DL-SPP di
+  [nome]"), le domande dirette DL (D-03-004) e RSPP (D-03-006) sono
+  assorbite, **non** generano istanze separate.
+- **Id diversi** (o una delle due figure non nominata) → comportamento
+  invariato, domande DL e RSPP separate, D-03-005 resta generica diretta.
+
+**Come si esprime "stessa persona":** toggle esplicito in SEZ-01
+("Il Datore di Lavoro svolge direttamente i compiti di RSPP") — **non**
+un confronto implicito sul nome. Deroga autorizzata a "non toccare SEZ-01"
+(stesso tipo di deroga additiva già concessa per gli id stabili in Sprint
+12): il toggle imposta lo stesso `id` su DL e RSPP quando attivo.
+
+**Motore centralizzato:** tutta la logica di fusione vive in un solo modulo
+(`src/lib/checklist/formazione.ts`: `dlCoincideRspp()`, `istanzeFormazione()`,
+`genericheFormazione()`). UI checklist, riepilogo, route PDF e `generaVerbale`
+la consumano identica — **non duplicare** la logica di fusione altrove.
+
+**Orfani su fusione/sfusione:** se il tecnico attiva/disattiva il toggle
+dopo aver già risposto separatamente a DL e RSPP, le risposte esistenti
+diventano orfane — stessa conferma esplicita già richiesta per la rimozione
+nominativi (Sprint 12). Nessuna eliminazione silenziosa.
+
+**Nessuna migration:** pura derivazione a runtime, riusa D-03-005 esistente
+e i composite-id già introdotti in Sprint 12. Template invariato a v6.
 
 ---
 
@@ -415,7 +458,7 @@ Sequenza atomica server-side per azienda (RPC, introdotta Sprint 6).
 | Sprint 11 | Duplica e Crea sostitutivo (genealogia verbali, RPC `clona_visita` transazionale, migration 014) | ✅ Completato |
 | Sprint 12 | SEZ-03 formazione per-nominativo: vista derivata da SEZ-01, ID stabili nominativi {id,nome}, normalizer retrocompatibile, campo data_verifica (migration 015) | ✅ Completato |
 | Sprint 12.1 | Sotto-sezione sorveglianza sanitaria condizionale in SEZ-01 (gate per-domanda, migration 016) | ✅ Completato |
-| **Sprint 12.2** | **SEZ-03 logica DL/RSPP: stessa persona → domanda DL-SPP combinata; persone diverse → domande separate** | 🔄 **In progettazione** |
+| Sprint 12.2 | SEZ-03 logica DL/RSPP: stessa persona (stesso id) → domanda DL-SPP combinata (D-03-005); persone diverse → domande separate. Toggle in SEZ-01 + conferma su orfani | ✅ Completato |
 | Sprint 13 | NC tracking: scadenze azioni correttive, solleciti | ⏳ Pianificato |
 | Sprint 14 | Pianificazione visite (contratto N visite/anno per sede, alert scadenze; poi menu centralizzato pianificazione tecnici) | ⏳ Pianificato |
 | Sprint 15 | Sopralluogo planimetrico (stile PlanRadar, pin su planimetria) | ⏳ Pianificato |
@@ -542,4 +585,4 @@ Code: usare sempre variabili d'ambiente o gestori di credenziali.
 
 ---
 
-*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-07, post Sprint 12.1 / Sprint 12.2 in progettazione)*
+*Ultimo aggiornamento: 30 giugno 2026 — sessione Claude.ai SafeCheck (DOC-ALIGN-08, post Sprint 12.2 — fix nomina MC nel gate ancora pendente)*
