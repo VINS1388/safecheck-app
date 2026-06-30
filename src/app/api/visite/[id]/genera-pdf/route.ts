@@ -38,19 +38,41 @@ export async function POST(
     );
   }
 
-  // 4. Nessuna domanda obbligatoria senza risposta
+  // 4. Validazione completezza (fonte di verità server-side):
+  //    a) nessuna domanda obbligatoria senza esito
+  //    b) nessuna risposta NC/PC/NV/NA con campo testo obbligatorio vuoto
+  //       (azione correttiva per NC/PC, motivazione per NV/NA)
   const risposte = await getRisposteByVisita(id);
-  const valorePer = new Map(risposte.map((r) => [r.domanda_id, r.valore]));
+  const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
   let obbligatorieMancanti = 0;
+  let campiTestoMancanti = 0;
   for (const sez of visita.template_snapshot.sezioni) {
     for (const d of sez.domande) {
-      if (d.obbligatoria && !valorePer.get(d.id)) obbligatorieMancanti += 1;
+      const r = rispostaPer.get(d.id);
+      const v = r?.valore ?? null;
+      if (!v) {
+        if (d.obbligatoria) obbligatorieMancanti += 1;
+        continue;
+      }
+      if (v === "NC" || v === "PC") {
+        if (!(r?.azione_correttiva ?? "").trim()) campiTestoMancanti += 1;
+      } else if (v === "NV" || v === "NA") {
+        if (!(r?.osservazioni ?? "").trim()) campiTestoMancanti += 1;
+      }
     }
   }
   if (obbligatorieMancanti > 0) {
     return NextResponse.json(
       {
         error: `${obbligatorieMancanti} domande obbligatorie senza risposta: impossibile generare il verbale.`,
+      },
+      { status: 422 }
+    );
+  }
+  if (campiTestoMancanti > 0) {
+    return NextResponse.json(
+      {
+        error: `${campiTestoMancanti} domande con campo obbligatorio non compilato (azione correttiva o motivazione)`,
       },
       { status: 422 }
     );

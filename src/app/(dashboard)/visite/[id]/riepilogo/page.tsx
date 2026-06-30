@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita } from "@/lib/db/queries/risposte";
+import { richiedeTesto } from "@/lib/checklist/completa";
 import type { EsitoRisposta } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
@@ -14,6 +15,9 @@ export interface ConteggiSezione {
   NV: number;
   NA: number;
   nonRisposto: number;
+  // Domande con esito selezionato ma campo testo obbligatorio mancante
+  // (azione correttiva per NC/PC, motivazione per NV/NA).
+  campoMancante: number;
   obbligatorieSenzaRisposta: number;
 }
 
@@ -30,9 +34,7 @@ export default async function RiepilogoPage({
   }
 
   const risposte = await getRisposteByVisita(id);
-  const valorePer = new Map<string, EsitoRisposta | null>(
-    risposte.map((r) => [r.domanda_id, r.valore])
-  );
+  const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
 
   const sezioni = [...visita.template_snapshot.sezioni].sort(
     (a, b) => a.ordine - b.ordine
@@ -48,15 +50,22 @@ export default async function RiepilogoPage({
       NV: 0,
       NA: 0,
       nonRisposto: 0,
+      campoMancante: 0,
       obbligatorieSenzaRisposta: 0,
     };
     for (const d of sez.domande) {
-      const v = valorePer.get(d.id) ?? null;
+      const r = rispostaPer.get(d.id);
+      const v = (r?.valore ?? null) as EsitoRisposta | null;
       if (v === null) {
         c.nonRisposto += 1;
         if (d.obbligatoria) c.obbligatorieSenzaRisposta += 1;
       } else {
         c[v] += 1;
+        // Esito selezionato ma campo testo obbligatorio mancante.
+        const testo = v === "PC" || v === "NC" ? r?.azione_correttiva : r?.osservazioni;
+        if (richiedeTesto(v) && !(testo ?? "").trim()) {
+          c.campoMancante += 1;
+        }
       }
     }
     return c;
@@ -65,7 +74,10 @@ export default async function RiepilogoPage({
   const totali = {
     NC: conteggi.reduce((s, c) => s + c.NC, 0),
     PC: conteggi.reduce((s, c) => s + c.PC, 0),
-    nonRisposto: conteggi.reduce((s, c) => s + c.nonRisposto, 0),
+    // "Non risposte" include sia le domande senza esito sia quelle con esito
+    // ma campo testo obbligatorio non compilato.
+    nonRisposto: conteggi.reduce((s, c) => s + c.nonRisposto + c.campoMancante, 0),
+    campoMancante: conteggi.reduce((s, c) => s + c.campoMancante, 0),
     obbligatorieSenzaRisposta: conteggi.reduce(
       (s, c) => s + c.obbligatorieSenzaRisposta,
       0

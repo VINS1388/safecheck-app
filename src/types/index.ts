@@ -21,7 +21,8 @@ export interface DomandaTemplate {
   obbligatoria: boolean;
   tipo_risposta: string; // "conformita_5" | "qualita_4"
   correzione_default?: string;
-  note_tecnico?: string;
+  note_tecnico?: string; // guida tecnica interna (anche descrizione domanda); mai stampata nel PDF
+  rif_normativo?: string; // riferimento normativo interno; mai stampato nel PDF
   campo_extra?: CampoExtraTemplate;
 }
 

@@ -1,9 +1,11 @@
 -- ============================================================
--- SafeCheck — Seed template master (52 domande, 7 sezioni)
--- Generato da: seed/templates (prototipo index.html, DOMANDE v1.0.3)
+-- SafeCheck — Seed template master (60 domande, 7 sezioni)
+-- Generato da: seed/templates (prototipo index.html, DOMANDE v1.0.4)
 -- Tipi risposta: conformita_5 (C/PC/NC/NV/NA)
 -- campo_extra nominativo presente sulle figure di SEZ-01
 --   (DL/RSPP singoli; tutte le altre figure multiple)
+-- Conteggio sezioni: SEZ-01 13, SEZ-02 7, SEZ-03 10, SEZ-04 7,
+--   SEZ-05 7, SEZ-06 6, SEZ-07 5.
 -- ============================================================
 
 INSERT INTO template_master (
@@ -17,14 +19,14 @@ INSERT INTO template_master (
   gen_random_uuid(),
   'SafeCheck — Verbale Sicurezza sul Lavoro',
   'Template standard per sopralluogo periodico D.Lgs. 81/2008',
-  1,
+  2,
   '{
   "id": "tmpl-safecheck-v1",
   "nome": "SafeCheck — Verbale Sicurezza sul Lavoro",
-  "versione": 1,
+  "versione": 2,
   "origine": {
     "template_id": "verbale-sopralluogo-sicurezza-lavoro-v1",
-    "versione_prototipo": "1.0.3"
+    "versione_prototipo": "1.0.4"
   },
   "sezioni": [
     {
@@ -35,12 +37,13 @@ INSERT INTO template_master (
       "domande": [
         {
           "id": "D-01-009",
-          "testo": "Nomina e documentazione Datore di Lavoro (DL)",
+          "testo": "Individuazione del Datore di Lavoro",
           "ordine": 1,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Individuazione del Datore di Lavoro ai sensi dell''art. 2 e relative deleghe di funzioni (art. 16), ove presenti.",
+          "note_tecnico": "Verificare l''individuazione del Datore di Lavoro ai sensi dell''art. 2 D.Lgs. 81/2008 e la presenza delle relative deleghe di funzioni ai sensi dell''art. 16, ove conferite.",
+          "rif_normativo": "Art. 2 e art. 16 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
             "label": "DL",
@@ -76,9 +79,19 @@ INSERT INTO template_master (
           }
         },
         {
+          "id": "D-01-012",
+          "testo": "Necessità di sorveglianza sanitaria",
+          "ordine": 4,
+          "obbligatoria": true,
+          "tipo_risposta": "conformita_5",
+          "correzione_default": "",
+          "note_tecnico": "Verificare se dalla valutazione dei rischi (DVR) emerge l''obbligo di sottoporre i lavoratori a sorveglianza sanitaria ai sensi dell''art. 41 D.Lgs. 81/2008.",
+          "rif_normativo": "Art. 41 D.Lgs. 81/2008"
+        },
+        {
           "id": "D-01-002",
           "testo": "È presente e documentato l''atto di nomina del Medico Competente (ove previsto dalla valutazione del rischio)?",
-          "ordine": 4,
+          "ordine": 5,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Verificare se la valutazione del rischio prevede l''obbligo di sorveglianza sanitaria. In caso affermativo, procedere alla nomina del Medico Competente con atto formale.",
@@ -91,12 +104,13 @@ INSERT INTO template_master (
         },
         {
           "id": "D-01-006",
-          "testo": "È presente la designazione del Rappresentante dei Lavoratori per la Sicurezza (RLS) o risulta eletto/nominato?",
-          "ordine": 5,
+          "testo": "Documentazione elezione o designazione RLS",
+          "ordine": 6,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Verificare se vi sono le condizioni per l''elezione del RLS. In assenza di elezione, registrare il fatto e verificare l''eventuale obbligo di comunicazione all''INAIL tramite il sistema RLST territoriale.",
-          "note_tecnico": "L''assenza di RLS non è sempre NC automatica: in alcuni casi supplisce l''RLST territoriale.",
+          "note_tecnico": "Verificare la presenza della documentazione relativa all''elezione o designazione del Rappresentante dei Lavoratori per la Sicurezza ai sensi degli artt. 47-48 D.Lgs. 81/2008.",
+          "rif_normativo": "Artt. 47-48 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
             "label": "RLS",
@@ -104,9 +118,19 @@ INSERT INTO template_master (
           }
         },
         {
+          "id": "D-01-013",
+          "testo": "Comunicazione nominativo RLS al portale INAIL",
+          "ordine": 7,
+          "obbligatoria": true,
+          "tipo_risposta": "conformita_5",
+          "correzione_default": "",
+          "note_tecnico": "Verificare l''avvenuto invio del nominativo del Rappresentante dei Lavoratori per la Sicurezza tramite il portale telematico INAIL, come previsto dalla normativa vigente.",
+          "rif_normativo": "Art. 18 c.1 lett. aa D.Lgs. 81/2008"
+        },
+        {
           "id": "D-01-004",
           "testo": "Sono presenti e documentate le nomine degli Addetti Antincendio e delle loro qualifiche?",
-          "ordine": 6,
+          "ordine": 8,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Procedere alla nomina formale degli addetti antincendio e verificare che abbiano completato la formazione specifica richiesta in base al livello di rischio incendio del luogo di lavoro.",
@@ -120,7 +144,7 @@ INSERT INTO template_master (
         {
           "id": "D-01-005",
           "testo": "Sono presenti e documentate le nomine degli Addetti al Primo Soccorso?",
-          "ordine": 7,
+          "ordine": 9,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Nominare formalmente gli addetti al primo soccorso e verificare che abbiano completato il corso di formazione specifico secondo il gruppo di appartenenza dell''azienda (A, B o C ai sensi del D.M. 388/2003).",
@@ -133,12 +157,13 @@ INSERT INTO template_master (
         },
         {
           "id": "D-01-010",
-          "testo": "Nomina Preposti",
-          "ordine": 8,
+          "testo": "Lettere di incarico Preposti",
+          "ordine": 10,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Individuazione e nomina dei preposti, anche di fatto, ai sensi dell''art. 19 e art. 18 c.1 lett. b-bis.",
+          "note_tecnico": "Verificare l''individuazione e la formalizzazione dell''incarico dei preposti, anche di fatto, ai sensi dell''art. 19 e dell''art. 18 comma 1 lett. b-bis D.Lgs. 81/2008.",
+          "rif_normativo": "Art. 19 e art. 18 c.1 lett. b-bis D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
             "label": "Preposti",
@@ -147,12 +172,13 @@ INSERT INTO template_master (
         },
         {
           "id": "D-01-011",
-          "testo": "Nomina Dirigenti (se applicabile)",
-          "ordine": 9,
+          "testo": "Deleghe di funzioni ai Dirigenti",
+          "ordine": 11,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
           "correzione_default": "",
-          "note_tecnico": "Individuazione dei dirigenti con poteri gerarchici/funzionali in materia di sicurezza, ove presenti.",
+          "note_tecnico": "Verificare la presenza di deleghe di funzioni in materia di sicurezza conferite ai dirigenti con poteri gerarchici e funzionali, ai sensi dell''art. 16 D.Lgs. 81/2008, ove presenti.",
+          "rif_normativo": "Art. 16 D.Lgs. 81/2008",
           "campo_extra": {
             "tipo": "nominativo",
             "label": "Dirigenti",
@@ -162,7 +188,7 @@ INSERT INTO template_master (
         {
           "id": "D-01-007",
           "testo": "Sono presenti aggiornamenti o revisioni delle nomine a seguito di variazioni organizzative rilevanti?",
-          "ordine": 10,
+          "ordine": 12,
           "obbligatoria": false,
           "tipo_risposta": "conformita_5",
           "correzione_default": "A ogni variazione organizzativa significativa (cambio RSPP, cambio MC, variazione numero addetti, apertura nuova sede), procedere alla revisione e aggiornamento degli atti di nomina.",
@@ -171,7 +197,7 @@ INSERT INTO template_master (
         {
           "id": "D-01-008",
           "testo": "È presente documentazione relativa alla riunione periodica di prevenzione e protezione (ove obbligatoria)?",
-          "ordine": 11,
+          "ordine": 13,
           "obbligatoria": false,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Programmare e documentare la riunione periodica annuale di prevenzione e protezione, redigendo verbale con gli argomenti discussi e le presenze.",
@@ -524,18 +550,29 @@ INSERT INTO template_master (
           "note_tecnico": "Verificare la presenza del documento (DiCo / DiRi per impianti preesistenti)."
         },
         {
-          "id": "D-06-004",
-          "testo": "L''impianto di messa a terra è presente, verificato e dotato di documentazione aggiornata?",
+          "id": "D-06-006",
+          "testo": "Denuncia dell''impianto di messa a terra",
           "ordine": 4,
           "obbligatoria": true,
           "tipo_risposta": "conformita_5",
-          "correzione_default": "Verificare la presenza della denuncia di messa a terra all''INAIL (ex ISPESL) e le verifiche periodiche effettuate da soggetto abilitato. Ripristinare la documentazione mancante.",
-          "note_tecnico": "Verificare denuncia INAIL e verifiche periodiche (biennale ordinario / annuale a rischio)."
+          "correzione_default": "Presentare la denuncia dell''impianto di messa a terra all''INAIL (ex ISPESL) ai sensi del DPR 462/2001 e conservarne copia in azienda.",
+          "note_tecnico": "Verificare la presenza della denuncia dell''impianto di messa a terra all''INAIL (ex ISPESL), come previsto dal DPR 462/2001.",
+          "rif_normativo": "DPR 462/2001"
+        },
+        {
+          "id": "D-06-007",
+          "testo": "Verifica periodica dell''impianto di messa a terra",
+          "ordine": 5,
+          "obbligatoria": true,
+          "tipo_risposta": "conformita_5",
+          "correzione_default": "Far eseguire la verifica periodica dell''impianto di messa a terra da organismo abilitato nei tempi previsti dal DPR 462/2001 (biennale ordinario; annuale negli ambienti a maggior rischio di incendio o esplosione).",
+          "note_tecnico": "Verificare l''esecuzione della verifica periodica dell''impianto di messa a terra nei tempi previsti (biennale per ambienti ordinari, annuale per ambienti a maggior rischio in caso di incendio o esplosione, ai sensi del DPR 462/2001).",
+          "rif_normativo": "DPR 462/2001"
         },
         {
           "id": "D-06-005",
           "testo": "Sono presenti procedure di manutenzione ordinaria e straordinaria documentate per le attrezzature critiche?",
-          "ordine": 5,
+          "ordine": 6,
           "obbligatoria": false,
           "tipo_risposta": "conformita_5",
           "correzione_default": "Predisporre un piano di manutenzione documentato per le attrezzature critiche, con registrazione degli interventi effettuati.",

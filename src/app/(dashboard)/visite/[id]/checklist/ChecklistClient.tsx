@@ -6,6 +6,7 @@ import { cn, formatDate } from "@/lib/utils";
 import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
 import { SEZIONE_NOMINATIVI } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
+import { rispostaCompleta } from "@/lib/checklist/completa";
 import { salvaRispostaAction, salvaNominativiAction } from "./actions";
 import DomandaCard from "./DomandaCard";
 import NominativiSEZ01 from "./NominativiSEZ01";
@@ -138,7 +139,12 @@ export default function ChecklistClient({
 
   function progresso(sezioneId: string) {
     const domande = sezioni.find((s) => s.id === sezioneId)?.domande ?? [];
-    const date = domande.filter((d) => risposte[d.id]?.valore != null).length;
+    // Una domanda conta come "data" solo se completa (esito + eventuale
+    // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
+    const date = domande.filter((d) => {
+      const e = risposte[d.id];
+      return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
+    }).length;
     return { date, totale: domande.length };
   }
 
@@ -239,7 +245,21 @@ export default function ChecklistClient({
                   azioneCorrettiva={entry?.azione ?? ""}
                   osservazioni={entry?.osservazioni ?? ""}
                   disabled={chiusa}
-                  onValore={(v) => aggiorna(d.id, sezione.id, { valore: v })}
+                  onValore={(v) => {
+                    const corrente = risposte[d.id];
+                    const patch: Partial<Entry> = { valore: v };
+                    // NC/PC: pre-compila l'azione correttiva col default del
+                    // template, solo se il campo è ancora vuoto (non sovrascrive
+                    // quanto già scritto dal tecnico). Resta editabile e obbligatorio.
+                    if (
+                      (v === "NC" || v === "PC") &&
+                      !(corrente?.azione ?? "").trim() &&
+                      d.correzione_default?.trim()
+                    ) {
+                      patch.azione = d.correzione_default;
+                    }
+                    aggiorna(d.id, sezione.id, patch);
+                  }}
                   onAzione={(t) => aggiorna(d.id, sezione.id, { azione: t })}
                   onMotivazione={(t) => aggiorna(d.id, sezione.id, { osservazioni: t })}
                 />

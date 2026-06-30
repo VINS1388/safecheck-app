@@ -96,23 +96,31 @@ export default function DomandaCard({
       {mostraAzione && (
         <div className="mt-3">
           <label className="block text-xs font-medium text-gray-700">
-            Azione correttiva suggerita
+            Azione correttiva <span className="text-red-500" title="Obbligatoria">*</span>
           </label>
           <textarea
             value={azioneCorrettiva}
             onChange={(e) => onAzione(e.target.value)}
             disabled={disabled}
             rows={2}
-            placeholder={domanda.correzione_default || undefined}
-            className="mt-1 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
+            placeholder="Descrivi l'azione correttiva da adottare…"
+            className={cn(
+              "mt-1 w-full resize-y rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50",
+              azioneCorrettiva.trim() ? "border-gray-300" : "border-red-300"
+            )}
           />
+          {!azioneCorrettiva.trim() && !disabled && (
+            <p className="mt-1 text-xs text-red-500">
+              Campo obbligatorio per chiudere la domanda.
+            </p>
+          )}
         </div>
       )}
 
       {mostraMotivazione && (
         <div className="mt-3">
           <label className="block text-xs font-medium text-gray-700">
-            Motivazione <span className="font-normal text-gray-400">(opzionale)</span>
+            Motivazione <span className="text-red-500" title="Obbligatoria">*</span>
           </label>
           <textarea
             value={osservazioni}
@@ -124,8 +132,16 @@ export default function DomandaCard({
                 ? "Perché non applicabile?"
                 : "Perché non verificato?"
             }
-            className="mt-1 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
+            className={cn(
+              "mt-1 w-full resize-y rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50",
+              osservazioni.trim() ? "border-gray-300" : "border-red-300"
+            )}
           />
+          {!osservazioni.trim() && !disabled && (
+            <p className="mt-1 text-xs text-red-500">
+              Campo obbligatorio per chiudere la domanda.
+            </p>
+          )}
         </div>
       )}
     </div>

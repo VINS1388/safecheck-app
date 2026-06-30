@@ -10,6 +10,7 @@ interface Totali {
   NC: number;
   PC: number;
   nonRisposto: number;
+  campoMancante: number;
   obbligatorieSenzaRisposta: number;
 }
 
@@ -40,7 +41,8 @@ export default function RiepilogoClient({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chiusa = stato !== "bozza";
-  const bloccato = totali.obbligatorieSenzaRisposta > 0;
+  const bloccato =
+    totali.obbligatorieSenzaRisposta > 0 || totali.campoMancante > 0;
 
   function handleNote(testo: string) {
     setNote(testo);
@@ -80,7 +82,8 @@ export default function RiepilogoClient({
       <div className="space-y-3 sm:hidden">
         {conteggi.map((c) => {
           const haNC = c.NC > 0;
-          const haMancanti = c.obbligatorieSenzaRisposta > 0;
+          const haMancanti =
+            c.obbligatorieSenzaRisposta > 0 || c.campoMancante > 0;
           return (
             <div
               key={c.id}
@@ -130,7 +133,8 @@ export default function RiepilogoClient({
           <tbody className="divide-y divide-gray-100">
             {conteggi.map((c) => {
               const haNC = c.NC > 0;
-              const haMancanti = c.obbligatorieSenzaRisposta > 0;
+              const haMancanti =
+            c.obbligatorieSenzaRisposta > 0 || c.campoMancante > 0;
               return (
                 <tr key={c.id}>
                   <td className="px-4 py-2">
@@ -215,12 +219,20 @@ export default function RiepilogoClient({
       )}
 
       {/* Blocco chiusura */}
-      {!chiusa && bloccato && (
+      {!chiusa && totali.obbligatorieSenzaRisposta > 0 && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {totali.obbligatorieSenzaRisposta} domand
           {totali.obbligatorieSenzaRisposta === 1 ? "a" : "e"} obbligator
           {totali.obbligatorieSenzaRisposta === 1 ? "ia" : "ie"} senza risposta —
           impossibile chiudere.
+        </div>
+      )}
+
+      {!chiusa && totali.campoMancante > 0 && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {totali.campoMancante} domand
+          {totali.campoMancante === 1 ? "a" : "e"} con campo obbligatorio non
+          compilato (azione correttiva o motivazione) — impossibile chiudere.
         </div>
       )}
 

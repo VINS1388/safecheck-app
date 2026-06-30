@@ -45,7 +45,7 @@ D.Lgs. 81/2008 (Testo Unico Sicurezza sul Lavoro) e successive modifiche.
 ### Fase 0 — Fondamenta ✅ Completata
 - Documentazione baseline (7 documenti fondativi)
 - PDF spike con PDFKit — viabilità confermata
-- Template JSON canonico (52 domande, 7 sezioni)
+- Template JSON canonico (55 domande, 7 sezioni)
 - Repo GitHub inizializzato
 
 ### Fase 1 — MVP-A ✅ Archiviata
@@ -81,7 +81,7 @@ Questo consente di aggiungere in futuro template diversi (es. HACCP) senza modif
 l'architettura core.
 
 **Regola:** non implementare HACCP né altri template ora. Non modificare la checklist
-canonica delle 52 domande sicurezza senza istruzione esplicita.
+canonica delle 55 domande sicurezza senza istruzione esplicita.
 
 ### Fase 3 — Prodotto maturo 🔮 Futuro
 - Sopralluogo planimetrico (modulo separato dal verbale checklist — vedi sezione dedicata)
@@ -120,7 +120,7 @@ canonica delle 52 domande sicurezza senza istruzione esplicita.
 | SEZ-06 | Emergenze e primo soccorso | Da finalizzare |
 | SEZ-07 | Ambienti di lavoro e attrezzature | Da finalizzare |
 
-**Totale domande:** 52 (verificate nel seed Sprint 2)
+**Totale domande:** 55 (SEZ-01: 13, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 6, SEZ-07: 5 — aggiornato Sprint 7-FIX)
 
 ### Tipi di risposta
 
@@ -178,7 +178,7 @@ non come domande separate.
   (non è una sezione strutturata, è generata automaticamente)
 - `campi_extra` — tipo TESTO_LIBERO, per sezioni aggiuntive non standard
 
-> ⚠️ `TESTO_LIBERO` NON è un `tipo_risposta` per le 52 domande principali.
+> ⚠️ `TESTO_LIBERO` NON è un `tipo_risposta` per le 55 domande principali.
 
 ---
 

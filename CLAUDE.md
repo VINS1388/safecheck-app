@@ -17,7 +17,7 @@ una sola volta e il sistema genera automaticamente il verbale PDF professionale.
 **Template futuri:** l'architettura è predisposta per accogliere template aggiuntivi (es. HACCP)
 tramite il sistema `template_master` / `template_cliente` già presente nello schema DB.
 **Regola ferrea:** non implementare HACCP né altri template finché non esplicitamente richiesto.
-La checklist canonica delle 52 domande sicurezza non va modificata senza istruzione esplicita.
+La checklist canonica delle 55 domande sicurezza non va modificata senza istruzione esplicita.
 
 **Owner:** Vincenzo (Studio Bilello) — IP personale esclusivo.
 **Repo:** https://github.com/VINS1388/safecheck
@@ -84,7 +84,7 @@ safecheck/
 
 ## Checklist — struttura canonica
 
-Il template è composto da **52 domande (SEZ-01: 11, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 5, SEZ-07: 5)** suddivise in **7 sezioni operative**:
+Il template è composto da **55 domande (SEZ-01: 13, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 6, SEZ-07: 5)** suddivise in **7 sezioni operative**:
 
 | Sezione | Contenuto |
 |---|---|
@@ -99,7 +99,7 @@ Il template è composto da **52 domande (SEZ-01: 11, SEZ-02: 7, SEZ-03: 10, SEZ-
 **Tipi di risposta validi:** `C` · `PC` · `NC` · `NV` · `NA`
 
 Il campo `azione_correttiva` appare **solo** per risposte NC o PC.
-Il campo `tipo_risposta: TESTO_LIBERO` NON esiste per le 52 domande (SEZ-01: 11, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 5, SEZ-07: 5) principali —
+Il campo `tipo_risposta: TESTO_LIBERO` NON esiste per le 55 domande (SEZ-01: 13, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 6, SEZ-07: 5) principali —
 è usato solo per `campi_extra` e `note_finali_visita`.
 
 **Registro infortuni:** rimosso da SEZ-02 (abolito da D.Lgs. 151/2015).
@@ -275,7 +275,7 @@ rimane in Fase 3/Fase 4. Non va anticipato né accennato nello Sprint 5.
 - NON usare URL pubblici per i PDF
 - NON stampare nel PDF: `sha256`, `rif_normativo`, `note_tecnico`, `correzione_default`
 - NON permettere Duplica o Crea sostitutivo su verbali in stato `bozza`
-- NON usare `TESTO_LIBERO` come `tipo_risposta` per le 52 domande (SEZ-01: 11, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 5, SEZ-07: 5) principali
+- NON usare `TESTO_LIBERO` come `tipo_risposta` per le 55 domande (SEZ-01: 13, SEZ-02: 7, SEZ-03: 10, SEZ-04: 7, SEZ-05: 7, SEZ-06: 6, SEZ-07: 5) principali
 - NON aggiungere il registro infortuni (abolito D.Lgs. 151/2015)
 - NON fare commit autonomi senza conferma esplicita di Vincenzo
 - NON implementare integrazione Safety Risk Suite (SRS2) — i contratti SiteContext/AuditResult sono definiti ma non implementati
