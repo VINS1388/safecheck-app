@@ -13,7 +13,9 @@ import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
 import {
   sezioneCollassata,
   completezzaImpreseSezioneOtto,
+  completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
+import { idRispostaFormazione } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -52,6 +54,7 @@ export async function POST(
   //       (azione correttiva per NC/PC, motivazione per NV/NA)
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
+  const nominativi = estraiNominativi(risposte); // strutturati (Sprint 12)
   // SEZ-08 multi-impresa: imprese + risposte per impresa (vuote per legacy v1).
   const imprese = await getImpreseByVisita(id);
   const risposteImprese = await getRisposteImpreseByVisita(id);
@@ -67,10 +70,13 @@ export async function POST(
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
     const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
+    const formazione = Boolean(sez.formazione_per_nominativo);
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
       // Multi-impresa: le D-08-002..009 sono validate sotto per impresa.
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
+      // Formazione: le domande mappate a una figura sono validate sotto per nominativo.
+      if (formazione && d.figura_nominativo) continue;
       const r = rispostaPer.get(d.id);
       const v = r?.valore ?? null;
       if (!v) {
@@ -92,6 +98,24 @@ export async function POST(
         dids,
         imprese.map((i) => i.id),
         (impId, did) => rispostaImpresaPer.get(`${impId}:${did}`) ?? null
+      );
+      obbligatorieMancanti += mancanti;
+    }
+    // Formazione per-nominativo: ogni nominativo di ogni figura mappata deve
+    // avere una risposta completa (esito + azione per NC/PC, motivazione NV/NA).
+    if (formazione) {
+      const domandeFigura = sez.domande
+        .filter((d) => d.figura_nominativo)
+        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
+      const { mancanti } = completezzaFormazioneNominativi(
+        domandeFigura,
+        (figura) => (nominativi[figura] ?? []).map((n) => n.id),
+        (domandaId, nomId) => {
+          const r = rispostaPer.get(idRispostaFormazione(domandaId, nomId));
+          return r
+            ? { esito: r.valore, azioneCorrettiva: r.azione_correttiva, osservazione: r.osservazioni }
+            : null;
+        }
       );
       obbligatorieMancanti += mancanti;
     }
@@ -149,7 +173,7 @@ export async function POST(
       qualifica: visita.qualifica_tecnico,
     },
     referente_cliente: visita.referente_cliente,
-    nominativi: estraiNominativi(risposte),
+    nominativi,
     template: visita.template_snapshot,
     impreseAppalto: imprese,
     risposteImprese,
@@ -161,6 +185,10 @@ export async function POST(
           azione_correttiva: r.azione_correttiva,
           osservazione_evidenza: r.osservazione_evidenza,
           osservazioni: r.osservazioni,
+          data_verifica:
+            r.campo_extra && typeof r.campo_extra === "object"
+              ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? null
+              : null,
         },
       ])
     ),

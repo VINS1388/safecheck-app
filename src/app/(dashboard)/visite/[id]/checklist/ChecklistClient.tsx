@@ -6,18 +6,19 @@ import { cn, formatDate } from "@/lib/utils";
 import type {
   EsitoRisposta,
   ImpresaAppalto,
-  Nominativi,
+  NominativiStrutturati,
   RispostaImpresaAppalto,
   TemplateSnapshot,
   TipoImpresa,
 } from "@/types";
-import { SEZIONE_NOMINATIVI } from "@/types";
+import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE, idRispostaFormazione } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
 import {
   rispostaCompleta,
   sezioneCollassata,
   domandaAttiva,
   completezzaImpreseSezioneOtto,
+  completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
 import {
   salvaRispostaAction,
@@ -25,6 +26,8 @@ import {
   creaImpresaAction,
   eliminaImpresaAction,
   salvaRispostaImpresaAction,
+  salvaRispostaFormazioneAction,
+  eliminaRispostaFormazioneAction,
 } from "./actions";
 import DomandaCard from "./DomandaCard";
 import NominativiSEZ01 from "./NominativiSEZ01";
@@ -32,6 +35,11 @@ import SezioneAppaltiImprese, {
   type ImpEntry,
   IMP_ENTRY_VUOTA,
 } from "./SezioneAppaltiImprese";
+import FormazioneNominativi, {
+  type FormEntry,
+  FORM_ENTRY_VUOTA,
+} from "./FormazioneNominativi";
+import { tuttiNominativi } from "@/lib/nominativi";
 
 interface Entry {
   valore: EsitoRisposta | null;
@@ -58,7 +66,7 @@ interface Props {
   numeroVerbale: string | null;
   template: TemplateSnapshot;
   risposteIniziali: RispostaSalvata[];
-  nominativiIniziali: Nominativi;
+  nominativiIniziali: NominativiStrutturati;
   impreseIniziali: ImpresaAppalto[];
   risposteImpreseIniziali: RispostaImpresaAppalto[];
 }
@@ -114,7 +122,30 @@ export default function ChecklistClient({
     return map;
   });
 
-  const [nominativi, setNominativi] = useState<Nominativi>(nominativiIniziali);
+  const [nominativi, setNominativi] =
+    useState<NominativiStrutturati>(nominativiIniziali);
+
+  // SEZ-03 formazione per-nominativo (Sprint 12): risposte indicizzate per
+  // domanda_id composito "<D-03-00x>::<nominativoId>".
+  const [risposteFormazione, setRisposteFormazione] = useState<
+    Record<string, FormEntry>
+  >(() => {
+    const map: Record<string, FormEntry> = {};
+    for (const r of risposteIniziali) {
+      if (r.sezione_id !== "SEZ-03" || !r.domanda_id.includes(SEP_FORMAZIONE)) continue;
+      const dv =
+        r.campo_extra && typeof r.campo_extra === "object"
+          ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? ""
+          : "";
+      map[r.domanda_id] = {
+        esito: r.valore,
+        azione: r.azione_correttiva ?? "",
+        osservazione: r.osservazioni ?? "",
+        dataVerifica: dv,
+      };
+    }
+    return map;
+  });
 
   // SEZ-08 multi-impresa (Sprint 9.1): elenco imprese + risposte per impresa.
   const [imprese, setImprese] = useState<ImpresaAppalto[]>(impreseIniziali);
@@ -179,10 +210,59 @@ export default function ChecklistClient({
     pianifica(domandaId, () => performSave(domandaId, entry));
   }
 
-  function handleNominativi(next: Nominativi) {
+  /** True se il nominativo ha già una risposta di formazione con esito (SEZ-03). */
+  function haRispostaFormazione(nominativoId: string): boolean {
+    const suffix = SEP_FORMAZIONE + nominativoId;
+    return Object.entries(risposteFormazione).some(
+      ([cid, e]) => cid.endsWith(suffix) && e.esito != null
+    );
+  }
+
+  function handleNominativi(next: NominativiStrutturati) {
+    // Nominativi rimossi rispetto allo stato corrente → elimina le eventuali
+    // risposte di formazione orfane (la conferma è già avvenuta in NominativiSEZ01).
+    const idsPrima = new Set(tuttiNominativi(nominativi).map((n) => n.id));
+    const idsDopo = new Set(tuttiNominativi(next).map((n) => n.id));
+    const rimossi = [...idsPrima].filter((id) => !idsDopo.has(id));
+
+    if (rimossi.length > 0) {
+      const orfane = Object.keys(risposteFormazione).filter((cid) =>
+        rimossi.some((id) => cid.endsWith(SEP_FORMAZIONE + id))
+      );
+      if (orfane.length > 0) {
+        setRisposteFormazione((prev) => {
+          const m = { ...prev };
+          for (const cid of orfane) delete m[cid];
+          return m;
+        });
+        void Promise.all(
+          orfane.map((cid) => eliminaRispostaFormazioneAction(visitaId, cid))
+        );
+      }
+    }
+
     setNominativi(next);
     pianifica(KEY_NOMINATIVI, async () => {
       const res = await salvaNominativiAction(visitaId, next);
+      setSalvataggio(res.ok ? "saved" : "error");
+      if (!res.ok) setErroreMsg(res.error);
+    });
+  }
+
+  /** Autosave di una risposta di formazione per-nominativo (SEZ-03). */
+  function handleFormazione(compositeId: string, patch: Partial<FormEntry>) {
+    const corrente = risposteFormazione[compositeId] ?? FORM_ENTRY_VUOTA;
+    const entry: FormEntry = { ...corrente, ...patch };
+    setRisposteFormazione((prev) => ({ ...prev, [compositeId]: entry }));
+    pianifica(`form:${compositeId}`, async () => {
+      const res = await salvaRispostaFormazioneAction({
+        visitaId,
+        domandaId: compositeId,
+        valore: entry.esito,
+        azioneCorrettiva: entry.azione.trim() ? entry.azione : null,
+        osservazioni: entry.osservazione.trim() ? entry.osservazione : null,
+        dataVerifica: entry.dataVerifica.trim() ? entry.dataVerifica : null,
+      });
       setSalvataggio(res.ok ? "saved" : "error");
       if (!res.ok) setErroreMsg(res.error);
     });
@@ -260,6 +340,10 @@ export default function ChecklistClient({
   const isMultiImpresa = Boolean(sezione.multi_impresa);
   const sezioneEspansaMulti =
     isMultiImpresa && !sezioneCollassata(sezione, valoreFiltro(sezione));
+  // SEZ-03 formazione per-nominativo: le domande mappate a una figura sono
+  // derivate per nominativo; restano dirette solo le generiche (Lavoratori, DL-SPP).
+  const isFormazione = Boolean(sezione.formazione_per_nominativo);
+  const domandeFiguraSez = sezione.domande.filter((d) => d.figura_nominativo);
 
   /** Valore corrente della domanda filtro di una sezione (null se nessuna filtro). */
   function valoreFiltro(sez: { domanda_filtro?: string }): EsitoRisposta | null {
@@ -307,6 +391,45 @@ export default function ChecklistClient({
       const totale = 1 + dids.length * Math.max(imprese.length, 1);
       const date = (filtroOk ? 1 : 0) + risposteDate;
       return { date, totale, collassata: false, completa: filtroOk && impreseComplete };
+    }
+    // SEZ-03 formazione per-nominativo: domande generiche + (1 per nominativo
+    // per ogni figura mappata). Reattivo allo stato corrente di SEZ-01.
+    if (sez?.formazione_per_nominativo) {
+      const generiche = domande.filter((d) => !d.figura_nominativo);
+      const genericheDate = generiche.filter((d) => {
+        const e = risposte[d.id];
+        return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
+      }).length;
+      const domandeFigura = domande
+        .filter((d) => d.figura_nominativo)
+        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
+      const getR = (did: string, nomId: string) => {
+        const e = risposteFormazione[idRispostaFormazione(did, nomId)];
+        return e
+          ? { esito: e.esito, azioneCorrettiva: e.azione, osservazione: e.osservazione }
+          : null;
+      };
+      const nomDi = (fig: string) => (nominativi[fig] ?? []).map((n) => n.id);
+      let formTot = 0;
+      let formDate = 0;
+      for (const df of domandeFigura)
+        for (const nomId of nomDi(df.figura)) {
+          formTot += 1;
+          const r = getR(df.domandaId, nomId);
+          if (rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione))
+            formDate += 1;
+        }
+      const { completa: formCompleta } = completezzaFormazioneNominativi(
+        domandeFigura,
+        nomDi,
+        getR
+      );
+      return {
+        date: genericheDate + formDate,
+        totale: generiche.length + formTot,
+        collassata: false,
+        completa: genericheDate === generiche.length && formCompleta,
+      };
     }
     // Una domanda conta come "data" solo se completa (esito + eventuale
     // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
@@ -407,6 +530,7 @@ export default function ChecklistClient({
               nominativi={nominativi}
               disabled={chiusa}
               onChange={handleNominativi}
+              haRisposta={haRispostaFormazione}
             />
           )}
 
@@ -418,6 +542,9 @@ export default function ChecklistClient({
             // Multi-impresa: le domande successive alla filtro sono gestite
             // per impresa nel componente dedicato, non come card di sezione.
             .filter((d) => !isMultiImpresa || d.id === sezione.domanda_filtro)
+            // Formazione per-nominativo: le domande mappate a una figura sono
+            // gestite dal componente dedicato; restano dirette solo le generiche.
+            .filter((d) => !isFormazione || !d.figura_nominativo)
             .map((d) => {
               const entry = risposte[d.id];
               return (
@@ -469,6 +596,18 @@ export default function ChecklistClient({
               onAdd={handleAddImpresa}
               onRemove={handleRemoveImpresa}
               onChange={handleChangeRispostaImpresa}
+            />
+          )}
+
+          {/* SEZ-03 formazione per-nominativo: domande derivate dai nominativi
+              di SEZ-01, raggruppate per figura. */}
+          {isFormazione && (
+            <FormazioneNominativi
+              domandeFigura={domandeFiguraSez}
+              nominativi={nominativi}
+              risposte={risposteFormazione}
+              disabled={chiusa}
+              onChange={handleFormazione}
             />
           )}
         </div>

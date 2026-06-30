@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVisitaById, getVerbaliRefByIds } from "@/lib/db/queries/visite";
-import { getRisposteByVisita } from "@/lib/db/queries/risposte";
+import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
 import {
   getImpreseByVisita,
   getRisposteImpreseByVisita,
@@ -10,8 +10,10 @@ import {
   richiedeTesto,
   sezioneCollassata,
   completezzaImpreseSezioneOtto,
+  completezzaFormazioneNominativi,
 } from "@/lib/checklist/completa";
 import type { EsitoRisposta } from "@/types";
+import { idRispostaFormazione } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
 export interface ConteggiSezione {
@@ -57,6 +59,7 @@ export default async function RiepilogoPage({
 
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
+  const nominativi = estraiNominativi(risposte); // strutturati (Sprint 12)
 
   // SEZ-08 multi-impresa: imprese + risposte per impresa (vuote per legacy v1).
   const imprese = await getImpreseByVisita(id);
@@ -89,11 +92,14 @@ export default async function RiepilogoPage({
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
     const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
+    const formazione = Boolean(sez.formazione_per_nominativo);
 
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
       // Multi-impresa: le D-08-002..009 sono aggregate sotto, per impresa.
       if (multiEspansa && d.id !== sez.domanda_filtro) continue;
+      // Formazione: le domande mappate a una figura sono aggregate sotto, per nominativo.
+      if (formazione && d.figura_nominativo) continue;
       const r = rispostaPer.get(d.id);
       const v = (r?.valore ?? null) as EsitoRisposta | null;
       if (v === null) {
@@ -122,6 +128,34 @@ export default async function RiepilogoPage({
         dids,
         imprese.map((i) => i.id),
         (impId, did) => rispostaImpresaPer.get(`${impId}:${did}`) ?? null
+      );
+      c.obbligatorieSenzaRisposta += mancanti;
+      c.nonRisposto += mancanti;
+    }
+
+    // Formazione per-nominativo: aggrega le risposte per nominativo e somma le
+    // slot mancanti come obbligatorie.
+    if (formazione) {
+      for (const d of sez.domande) {
+        if (!d.figura_nominativo) continue;
+        for (const nom of nominativi[d.figura_nominativo] ?? []) {
+          const v = (rispostaPer.get(idRispostaFormazione(d.id, nom.id))?.valore ??
+            null) as EsitoRisposta | null;
+          if (v) c[v] += 1;
+        }
+      }
+      const domandeFigura = sez.domande
+        .filter((d) => d.figura_nominativo)
+        .map((d) => ({ domandaId: d.id, figura: d.figura_nominativo! }));
+      const { mancanti } = completezzaFormazioneNominativi(
+        domandeFigura,
+        (figura) => (nominativi[figura] ?? []).map((n) => n.id),
+        (domandaId, nomId) => {
+          const r = rispostaPer.get(idRispostaFormazione(domandaId, nomId));
+          return r
+            ? { esito: r.valore, azioneCorrettiva: r.azione_correttiva, osservazione: r.osservazioni }
+            : null;
+        }
       );
       c.obbligatorieSenzaRisposta += mancanti;
       c.nonRisposto += mancanti;

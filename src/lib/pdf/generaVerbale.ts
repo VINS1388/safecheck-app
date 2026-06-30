@@ -2,18 +2,25 @@ import PDFDocument from "pdfkit";
 import type {
   EsitoRisposta,
   ImpresaAppalto,
-  Nominativi,
+  NominativiStrutturati,
   RispostaImpresaAppalto,
   TemplateSnapshot,
 } from "@/types";
-import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI, ETICHETTE_TIPO_IMPRESA } from "@/types";
+import {
+  FIGURE_SICUREZZA,
+  SEZIONE_NOMINATIVI,
+  ETICHETTE_TIPO_IMPRESA,
+  idRispostaFormazione,
+} from "@/types";
 import { sezioneCollassata } from "@/lib/checklist/completa";
+import { normalizzaNominativi } from "@/lib/nominativi";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
   azione_correttiva: string | null;
   osservazione_evidenza: string | null;
   osservazioni: string | null;
+  data_verifica?: string | null; // SEZ-03 formazione per-nominativo (Sprint 12)
 }
 
 export interface VerbaleData {
@@ -29,7 +36,7 @@ export interface VerbaleData {
   sede: { nome: string; indirizzo: string; citta: string };
   specialist: { nome_completo: string; qualifica: string | null };
   referente_cliente: string | null;
-  nominativi: Nominativi;
+  nominativi: NominativiStrutturati;
   template: TemplateSnapshot;
   risposte: Record<string, VerbaleRisposta>;
   // SEZ-08 multi-impresa (Sprint 9.1). Assenti per visite legacy v1.
@@ -108,6 +115,10 @@ export async function generaVerbale(dati: VerbaleData): Promise<Buffer> {
       doc.on("data", (c: Buffer) => chunks.push(c));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
+
+      // Difensivo: normalizza i nominativi (accetta sia il formato strutturato
+      // {id,nome} sia eventuali input legacy a stringhe).
+      dati = { ...dati, nominativi: normalizzaNominativi(dati.nominativi) };
 
       renderCopertina(doc, dati);
       renderSezioni(doc, dati);
@@ -190,10 +201,9 @@ function renderCopertina(doc: Doc, dati: VerbaleData): void {
 }
 
 // ── Nominativi figure sicurezza (SEZ-01) ─────────────────────────────────
-function renderNominativi(doc: Doc, nominativi: Nominativi): void {
+function renderNominativi(doc: Doc, nominativi: NominativiStrutturati): void {
   const righe = FIGURE_SICUREZZA.map((f) => {
-    const v = nominativi[f.key];
-    const testo = Array.isArray(v) ? v.join(", ") : (v ?? "");
+    const testo = (nominativi[f.key] ?? []).map((n) => n.nome).join(", ");
     return [f.label, testo.trim()] as [string, string];
   }).filter(([, testo]) => testo.length > 0);
 
@@ -277,7 +287,10 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
 
     const domande = [...sez.domande]
       .sort((a, b) => a.ordine - b.ordine)
-      .filter((d) => !soloFiltro || d.id === sez.domanda_filtro);
+      .filter((d) => !soloFiltro || d.id === sez.domanda_filtro)
+      // Formazione per-nominativo: le domande mappate a una figura sono stampate
+      // per nominativo sotto; qui restano solo le generiche (Lavoratori, DL-SPP).
+      .filter((d) => !sez.formazione_per_nominativo || !d.figura_nominativo);
     for (const d of domande) {
       assicuraSpazio(doc, 70);
 
@@ -364,7 +377,84 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
     if (sez.multi_impresa && !collassata) {
       renderImpreseAppalto(doc, sez, dati);
     }
+
+    // Formazione per-nominativo (Sprint 12): domande di formazione raggruppate
+    // per figura, una riga per ogni nominativo di SEZ-01.
+    if (sez.formazione_per_nominativo) {
+      renderFormazioneNominativi(doc, sez, dati);
+    }
   });
+}
+
+// ── Formazione per-nominativo (SEZ-03) ────────────────────────────────────
+function renderFormazioneNominativi(
+  doc: Doc,
+  sez: VerbaleData["template"]["sezioni"][number],
+  dati: VerbaleData
+): void {
+  const gruppi = [...sez.domande]
+    .filter((d) => d.figura_nominativo)
+    .sort((a, b) => a.ordine - b.ordine)
+    .map((d) => ({
+      domanda: d,
+      figura: d.figura_nominativo!,
+      lista: dati.nominativi[d.figura_nominativo!] ?? [],
+    }))
+    .filter((g) => g.lista.length > 0);
+
+  for (const { domanda, figura, lista } of gruppi) {
+    assicuraSpazio(doc, 40);
+    doc.x = MARGINE;
+    const label = FIGURE_SICUREZZA.find((f) => f.key === figura)?.label ?? figura;
+    doc.fillColor(NERO).font("Helvetica-Bold").fontSize(11).text(label);
+    doc.moveDown(0.3);
+
+    for (const nom of lista) {
+      assicuraSpazio(doc, 50);
+      doc.x = MARGINE;
+      const r = dati.risposte[idRispostaFormazione(domanda.id, nom.id)] ?? null;
+      const esito = r?.esito ?? null;
+
+      doc
+        .fillColor(NERO)
+        .font("Helvetica")
+        .fontSize(10.5)
+        .text(`Formazione di ${nom.nome}`, { width: larghezzaContenuto(doc) });
+      doc.moveDown(0.2);
+
+      const colore = esito ? COLORE_ESITO[esito] : GRIGIO;
+      const testoEsito = esito ? `${esito} — ${ETICHETTA_ESITO[esito]}` : "Nessuna risposta";
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(colore).text(testoEsito);
+
+      if ((esito === "NC" || esito === "PC") && r?.azione_correttiva) {
+        doc.moveDown(0.1);
+        doc.font("Helvetica-Oblique").fontSize(9.5).fillColor(GRIGIO).text(
+          `Azione correttiva: ${r.azione_correttiva}`,
+          { width: larghezzaContenuto(doc) }
+        );
+      }
+      if ((esito === "NV" || esito === "NA") && r?.osservazioni) {
+        doc.moveDown(0.1);
+        doc.font("Helvetica-Oblique").fontSize(9.5).fillColor(GRIGIO).text(
+          `Motivazione: ${r.osservazioni}`,
+          { width: larghezzaContenuto(doc) }
+        );
+      }
+      if (r?.data_verifica) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Data verifica formazione: ${formatData(r.data_verifica)}`);
+      }
+
+      doc.moveDown(0.5);
+      rigaSottile(doc);
+      doc.moveDown(0.5);
+    }
+    doc.moveDown(0.3);
+  }
 }
 
 // ── Sotto-sezioni per impresa (SEZ-08 multi-impresa) ──────────────────────
@@ -531,6 +621,19 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
       if (fe) conteggi[fe] += 1;
       for (const r of dati.risposteImprese ?? []) {
         conteggi[r.esito] += 1;
+      }
+    } else if (sez.formazione_per_nominativo) {
+      // SEZ-03 formazione: domande generiche + 1 risposta per nominativo.
+      for (const d of sez.domande) {
+        if (d.figura_nominativo) {
+          for (const nom of dati.nominativi[d.figura_nominativo] ?? []) {
+            const e = dati.risposte[idRispostaFormazione(d.id, nom.id)]?.esito;
+            if (e) conteggi[e] += 1;
+          }
+        } else {
+          const esito = dati.risposte[d.id]?.esito;
+          if (esito) conteggi[esito] += 1;
+        }
       }
     } else {
       for (const d of sez.domande) {

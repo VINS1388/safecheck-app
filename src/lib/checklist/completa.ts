@@ -119,3 +119,41 @@ export function completezzaImpreseSezioneOtto(
   }
   return { mancanti, completa: mancanti === 0 };
 }
+
+// ── Completezza formazione per-nominativo SEZ-03 (Sprint 12) ───────────────
+//
+// Per ogni domanda di formazione mappata a una figura SEZ-01 e per ogni
+// nominativo di quella figura, deve esistere una risposta completa (stessa
+// regola standard: esito + azione per NC/PC, motivazione per NV/NA). Una figura
+// senza nominativi non genera domande → non contribuisce ai mancanti (nessun
+// requisito "almeno uno", a differenza delle imprese di SEZ-08).
+
+export interface DomandaFigura {
+  domandaId: string; // es. "D-03-002"
+  figura: string; // es. "PREPOSTI"
+}
+
+/**
+ * @param domandeFigura  domande SEZ-03 mappate a una figura (con figura_nominativo)
+ * @param nominativiDi   ids dei nominativi di una figura
+ * @param getRisposta    risposta formazione per (domandaFigura, nominativoId)
+ */
+export function completezzaFormazioneNominativi(
+  domandeFigura: DomandaFigura[],
+  nominativiDi: (figura: string) => string[],
+  getRisposta: (
+    domandaId: string,
+    nominativoId: string
+  ) => RispostaImpresaSlot | null | undefined
+): { mancanti: number; completa: boolean } {
+  let mancanti = 0;
+  for (const df of domandeFigura) {
+    for (const nomId of nominativiDi(df.figura)) {
+      const r = getRisposta(df.domandaId, nomId);
+      if (!rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione)) {
+        mancanti += 1;
+      }
+    }
+  }
+  return { mancanti, completa: mancanti === 0 };
+}

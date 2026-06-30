@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import type { EsitoRisposta, Nominativi } from "@/types";
+import type { EsitoRisposta, NominativiStrutturati } from "@/types";
 import { DOMANDA_NOMINATIVI, SEZIONE_NOMINATIVI } from "@/types";
+import { normalizzaNominativi } from "@/lib/nominativi";
 
 /** Stato di una singola risposta come salvato/letto dal DB. */
 export interface RispostaSalvata {
@@ -52,12 +53,59 @@ export async function salvaRisposta(input: SalvaRispostaInput): Promise<void> {
 }
 
 /**
+ * Salva (upsert) una risposta di formazione per-nominativo (SEZ-03, Sprint 12).
+ * Il `domandaId` è composito (`<D-03-00x>::<nominativoId>`); la data di verifica
+ * è opzionale e vive in `campo_extra` (non concorre alla completezza).
+ */
+export async function salvaRispostaFormazione(input: {
+  visitaId: string;
+  domandaId: string;
+  valore: EsitoRisposta | null;
+  azioneCorrettiva: string | null;
+  osservazioni: string | null;
+  dataVerifica: string | null;
+}): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("risposte").upsert(
+    {
+      visita_id: input.visitaId,
+      domanda_id: input.domandaId,
+      sezione_id: "SEZ-03",
+      valore: input.valore,
+      azione_correttiva: input.azioneCorrettiva,
+      osservazioni: input.osservazioni,
+      campo_extra: input.dataVerifica ? { data_verifica: input.dataVerifica } : {},
+      aggiornata_il: new Date().toISOString(),
+    },
+    { onConflict: "visita_id,domanda_id" }
+  );
+
+  if (error) {
+    throw new Error(`Errore salvataggio formazione: ${error.message}`);
+  }
+}
+
+/** Elimina una risposta (per id composito), es. formazione di un nominativo rimosso. */
+export async function eliminaRisposta(visitaId: string, domandaId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("risposte")
+    .delete()
+    .eq("visita_id", visitaId)
+    .eq("domanda_id", domandaId);
+  if (error) {
+    throw new Error(`Errore eliminazione risposta: ${error.message}`);
+  }
+}
+
+/**
  * Salva i nominativi delle figure di sicurezza (SEZ-01) come riga sintetica
- * in `risposte`, con i dati in `campo_extra`.
+ * in `risposte`, con i dati in `campo_extra` (formato strutturato {id,nome}).
  */
 export async function salvaNominativi(
   visitaId: string,
-  nominativi: Nominativi
+  nominativi: NominativiStrutturati
 ): Promise<void> {
   const supabase = await createClient();
 
@@ -94,11 +142,12 @@ export async function getRisposteByVisita(visitaId: string): Promise<RispostaSal
   return data as RispostaSalvata[];
 }
 
-/** Estrae i nominativi dalla riga sintetica SEZ-01, se presente. */
-export function estraiNominativi(risposte: RispostaSalvata[]): Nominativi {
+/**
+ * Estrae e NORMALIZZA i nominativi dalla riga sintetica SEZ-01 (Sprint 12):
+ * ritorna sempre la forma canonica {id,nome} per figura, accettando anche il
+ * formato legacy a stringhe.
+ */
+export function estraiNominativi(risposte: RispostaSalvata[]): NominativiStrutturati {
   const riga = risposte.find((r) => r.domanda_id === DOMANDA_NOMINATIVI);
-  if (riga && riga.campo_extra && typeof riga.campo_extra === "object") {
-    return riga.campo_extra as Nominativi;
-  }
-  return {};
+  return normalizzaNominativi(riga?.campo_extra ?? null);
 }

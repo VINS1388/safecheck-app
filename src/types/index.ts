@@ -27,6 +27,11 @@ export interface DomandaTemplate {
   note_tecnico?: string; // guida tecnica interna (legacy/fallback UI); mai stampata nel PDF
   rif_normativo?: string; // riferimento normativo interno; mai stampato nel PDF
   nota_ui?: string; // breve nota operativa VISIBILE in UI (es. effetto della domanda filtro); non stampata nel PDF
+  // Marker SEZ-03 formazione per-nominativo (Sprint 12): se valorizzato, questa
+  // domanda di formazione non è unica di sezione ma viene derivata per ciascun
+  // nominativo della figura SEZ-01 indicata (es. "PREPOSTI"). Le domande senza
+  // figura_nominativo (Lavoratori, DL-SPP) restano singole generiche.
+  figura_nominativo?: string;
   campo_extra?: CampoExtraTemplate;
 }
 
@@ -47,6 +52,10 @@ export interface SezioneTemplate {
   // imprese_appalto / risposte_imprese_appalto). Discrimina gli snapshot v1.1
   // (con marker) da quelli legacy v1 (senza marker, comportamento invariato).
   multi_impresa?: boolean;
+  // Marker SEZ-03 (Sprint 12): se true, le domande con `figura_nominativo` sono
+  // derivate per ogni nominativo della relativa figura di SEZ-01 (vista derivata),
+  // non risposte una volta per figura. Discrimina gli snapshot v5 dai legacy v4.
+  formazione_per_nominativo?: boolean;
   domande: DomandaTemplate[];
 }
 
@@ -113,11 +122,39 @@ export const FIGURE_SICUREZZA: FiguraSicurezza[] = [
   { key: "DIRIGENTI", label: "Dirigenti", multiplo: true },
 ];
 
-/** Mappa figura → nome (singolo) o lista nomi (multiplo). */
+/**
+ * Formato STORAGE legacy (pre-Sprint 12) dei nominativi: stringhe nude per
+ * figura (singolo o lista). Mantenuto solo per retrocompatibilità in lettura.
+ */
 export type Nominativi = Record<string, string | string[]>;
+
+/**
+ * Un nominativo con id stabile (Sprint 12). L'id sopravvive alle correzioni del
+ * nome e collega in modo univoco le risposte di formazione di SEZ-03.
+ */
+export interface Nominativo {
+  id: string;
+  nome: string;
+}
+
+/**
+ * Forma canonica normalizzata dei nominativi usata dall'app: per ogni figura,
+ * sempre una lista di {id,nome} (le figure singole hanno 0 o 1 elemento).
+ * Il normalizzatore (`normalizzaNominativi`) accetta sia il formato legacy
+ * (stringhe) sia quello nuovo ({id,nome}).
+ */
+export type NominativiStrutturati = Record<string, Nominativo[]>;
 
 /** Id della "domanda" fittizia che archivia i nominativi di SEZ-01. */
 export const DOMANDA_NOMINATIVI = "SEZ-01-NOMINATIVI";
+
+/** Separatore per il domanda_id composito delle risposte formazione per-nominativo. */
+export const SEP_FORMAZIONE = "::";
+
+/** Costruisce il domanda_id composito di una risposta formazione per-nominativo. */
+export function idRispostaFormazione(domandaFigura: string, nominativoId: string): string {
+  return `${domandaFigura}${SEP_FORMAZIONE}${nominativoId}`;
+}
 
 /** Id della sezione organizzazione/figure sicurezza. */
 export const SEZIONE_NOMINATIVI = "SEZ-01";

@@ -37,6 +37,11 @@ export interface DomandaCardProps {
   // Mostra il campo opzionale "osservazione / descrizione evidenza" per NC/PC.
   // Disattivato nel contesto impresa di SEZ-08 (nessuna colonna dedicata).
   mostraOsservazioneEvidenza?: boolean;
+  // Campo data di verifica formazione (SEZ-03 per-nominativo, Sprint 12).
+  // Opzionale, non concorre alla completezza; nessun calcolo scadenze qui.
+  mostraDataVerifica?: boolean;
+  dataVerifica?: string;
+  onDataVerifica?: (valore: string) => void;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
   onOsservazioneEvidenza: (testo: string) => void;
@@ -51,6 +56,9 @@ export default function DomandaCard({
   osservazioni,
   disabled,
   mostraOsservazioneEvidenza = true,
+  mostraDataVerifica = false,
+  dataVerifica = "",
+  onDataVerifica,
   onValore,
   onAzione,
   onOsservazioneEvidenza,
@@ -117,6 +125,24 @@ export default function DomandaCard({
           );
         })}
       </div>
+
+      {/* Data di verifica/aggiornamento formazione (SEZ-03 per-nominativo).
+          Opzionale, indipendente dall'esito; nessun calcolo di scadenza. */}
+      {mostraDataVerifica && (
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-gray-700">
+            Data ultima verifica/aggiornamento formazione{" "}
+            <span className="font-normal text-gray-400">(opzionale)</span>
+          </label>
+          <input
+            type="date"
+            value={dataVerifica}
+            onChange={(e) => onDataVerifica?.(e.target.value)}
+            disabled={disabled}
+            className="mt-1 min-h-[44px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
+          />
+        </div>
+      )}
 
       {/* Campo testo libero opzionale, indipendente dall'esito (es. elenco
           imprese appaltatrici / referenti). Persistito su osservazione_evidenza. */}

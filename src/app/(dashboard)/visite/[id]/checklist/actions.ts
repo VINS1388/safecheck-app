@@ -1,7 +1,12 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { salvaRisposta, salvaNominativi } from "@/lib/db/queries/risposte";
+import {
+  salvaRisposta,
+  salvaNominativi,
+  salvaRispostaFormazione,
+  eliminaRisposta,
+} from "@/lib/db/queries/risposte";
 import {
   creaImpresa,
   eliminaImpresa,
@@ -10,7 +15,7 @@ import {
 import type {
   EsitoRisposta,
   ImpresaAppalto,
-  Nominativi,
+  NominativiStrutturati,
   TipoImpresa,
 } from "@/types";
 
@@ -55,10 +60,10 @@ export async function salvaRispostaAction(
   }
 }
 
-/** Autosave dei nominativi delle figure di sicurezza (SEZ-01). */
+/** Autosave dei nominativi delle figure di sicurezza (SEZ-01), formato strutturato. */
 export async function salvaNominativiAction(
   visitaId: string,
-  nominativi: Nominativi
+  nominativi: NominativiStrutturati
 ): Promise<SalvaRispostaResult> {
   const { user } = await getCurrentUser();
   if (!user) {
@@ -67,6 +72,46 @@ export async function salvaNominativiAction(
 
   try {
     await salvaNominativi(visitaId, nominativi);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Autosave di una risposta di formazione per-nominativo (SEZ-03, Sprint 12). */
+export async function salvaRispostaFormazioneAction(input: {
+  visitaId: string;
+  domandaId: string;
+  valore: EsitoRisposta | null;
+  azioneCorrettiva: string | null;
+  osservazioni: string | null;
+  dataVerifica: string | null;
+}): Promise<SalvaRispostaResult> {
+  const { user } = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  }
+  try {
+    await salvaRispostaFormazione(input);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Elimina la risposta di formazione di un nominativo rimosso (SEZ-03). */
+export async function eliminaRispostaFormazioneAction(
+  visitaId: string,
+  domandaId: string
+): Promise<SalvaRispostaResult> {
+  const { user } = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  }
+  try {
+    await eliminaRisposta(visitaId, domandaId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";
