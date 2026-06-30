@@ -34,6 +34,9 @@ export interface DomandaCardProps {
   osservazioneEvidenza: string;
   osservazioni: string;
   disabled?: boolean;
+  // Mostra il campo opzionale "osservazione / descrizione evidenza" per NC/PC.
+  // Disattivato nel contesto impresa di SEZ-08 (nessuna colonna dedicata).
+  mostraOsservazioneEvidenza?: boolean;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
   onOsservazioneEvidenza: (testo: string) => void;
@@ -47,6 +50,7 @@ export default function DomandaCard({
   osservazioneEvidenza,
   osservazioni,
   disabled,
+  mostraOsservazioneEvidenza = true,
   onValore,
   onAzione,
   onOsservazioneEvidenza,
@@ -160,7 +164,7 @@ export default function DomandaCard({
           {/* Campo OPZIONALE: descrizione dell'evidenza osservata. Non blocca la
               chiusura. Soppresso se la domanda usa già osservazione_evidenza per
               il campo testo libero (stessa colonna), per evitare doppio input. */}
-          {!campoTestoLibero && (
+          {mostraOsservazioneEvidenza && !campoTestoLibero && (
             <div className="mt-3">
               <label className="block text-xs font-medium text-gray-700">
                 Osservazione / descrizione evidenza{" "}

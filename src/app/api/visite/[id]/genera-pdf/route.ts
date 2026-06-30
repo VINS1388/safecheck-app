@@ -4,9 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
+import {
+  getImpreseByVisita,
+  getRisposteImpreseByVisita,
+} from "@/lib/db/queries/imprese";
 import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
 import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
-import { sezioneCollassata } from "@/lib/checklist/completa";
+import {
+  sezioneCollassata,
+  completezzaImpreseSezioneOtto,
+} from "@/lib/checklist/completa";
 
 export const runtime = "nodejs";
 
@@ -45,6 +52,12 @@ export async function POST(
   //       (azione correttiva per NC/PC, motivazione per NV/NA)
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
+  // SEZ-08 multi-impresa: imprese + risposte per impresa (vuote per legacy v1).
+  const imprese = await getImpreseByVisita(id);
+  const risposteImprese = await getRisposteImpreseByVisita(id);
+  const rispostaImpresaPer = new Map(
+    risposteImprese.map((r) => [`${r.impresaId}:${r.domandaId}`, r])
+  );
   let obbligatorieMancanti = 0;
   let campiTestoMancanti = 0;
   for (const sez of visita.template_snapshot.sezioni) {
@@ -53,8 +66,11 @@ export async function POST(
       ? rispostaPer.get(sez.domanda_filtro)?.valore ?? null
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
+    const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
+      // Multi-impresa: le D-08-002..009 sono validate sotto per impresa.
+      if (multiEspansa && d.id !== sez.domanda_filtro) continue;
       const r = rispostaPer.get(d.id);
       const v = r?.valore ?? null;
       if (!v) {
@@ -66,6 +82,18 @@ export async function POST(
       } else if (v === "NV" || v === "NA") {
         if (!(r?.osservazioni ?? "").trim()) campiTestoMancanti += 1;
       }
+    }
+    // Multi-impresa espansa: serve ≥1 impresa con tutte le 8 domande risposte.
+    if (multiEspansa) {
+      const dids = sez.domande
+        .filter((d) => d.id !== sez.domanda_filtro)
+        .map((d) => d.id);
+      const { mancanti } = completezzaImpreseSezioneOtto(
+        dids,
+        imprese.map((i) => i.id),
+        (impId, did) => rispostaImpresaPer.get(`${impId}:${did}`) ?? null
+      );
+      obbligatorieMancanti += mancanti;
     }
   }
   if (obbligatorieMancanti > 0) {
@@ -123,6 +151,8 @@ export async function POST(
     referente_cliente: visita.referente_cliente,
     nominativi: estraiNominativi(risposte),
     template: visita.template_snapshot,
+    impreseAppalto: imprese,
+    risposteImprese,
     risposte: Object.fromEntries(
       risposte.map((r) => [
         r.domanda_id,

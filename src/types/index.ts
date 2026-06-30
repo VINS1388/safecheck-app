@@ -41,7 +41,43 @@ export interface SezioneTemplate {
   // altre domande della sezione sono nascoste e non richieste. Introdotto in
   // SEZ-08 (Appalti/DUVRI, Sprint 9).
   domanda_filtro?: string;
+  // Marker modello multi-impresa (Sprint 9.1): se true, quando la sezione è
+  // espansa le domande successive alla filtro NON sono uniche di sezione ma
+  // vengono ripetute per ogni impresa inserita dal tecnico (tabelle
+  // imprese_appalto / risposte_imprese_appalto). Discrimina gli snapshot v1.1
+  // (con marker) da quelli legacy v1 (senza marker, comportamento invariato).
+  multi_impresa?: boolean;
   domande: DomandaTemplate[];
+}
+
+// ── Appalti SEZ-08 multi-impresa (Sprint 9.1) ─────────────────────────────
+
+export type TipoImpresa = "appaltatrice" | "subappaltatrice" | "lavoratore_autonomo";
+
+/** Etichette UI per i tipi di impresa. */
+export const ETICHETTE_TIPO_IMPRESA: Record<TipoImpresa, string> = {
+  appaltatrice: "Appaltatrice",
+  subappaltatrice: "Subappaltatrice",
+  lavoratore_autonomo: "Lavoratore autonomo",
+};
+
+/** Un'impresa coinvolta in un appalto presso la sede della visita. */
+export interface ImpresaAppalto {
+  id: string;
+  visitaId: string;
+  ragioneSociale: string;
+  tipoImpresa: TipoImpresa;
+  ordine: number;
+}
+
+/** Risposta di una singola impresa a una delle domande D-08-002..009. */
+export interface RispostaImpresaAppalto {
+  id: string;
+  impresaId: string;
+  domandaId: string;
+  esito: EsitoRisposta;
+  osservazione?: string;
+  azioneCorrettiva?: string;
 }
 
 /**

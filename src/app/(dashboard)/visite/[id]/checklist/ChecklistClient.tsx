@@ -3,13 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cn, formatDate } from "@/lib/utils";
-import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
+import type {
+  EsitoRisposta,
+  ImpresaAppalto,
+  Nominativi,
+  RispostaImpresaAppalto,
+  TemplateSnapshot,
+  TipoImpresa,
+} from "@/types";
 import { SEZIONE_NOMINATIVI } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
-import { rispostaCompleta, sezioneCollassata, domandaAttiva } from "@/lib/checklist/completa";
-import { salvaRispostaAction, salvaNominativiAction } from "./actions";
+import {
+  rispostaCompleta,
+  sezioneCollassata,
+  domandaAttiva,
+  completezzaImpreseSezioneOtto,
+} from "@/lib/checklist/completa";
+import {
+  salvaRispostaAction,
+  salvaNominativiAction,
+  creaImpresaAction,
+  eliminaImpresaAction,
+  salvaRispostaImpresaAction,
+} from "./actions";
 import DomandaCard from "./DomandaCard";
 import NominativiSEZ01 from "./NominativiSEZ01";
+import SezioneAppaltiImprese, {
+  type ImpEntry,
+  IMP_ENTRY_VUOTA,
+} from "./SezioneAppaltiImprese";
 
 interface Entry {
   valore: EsitoRisposta | null;
@@ -37,6 +59,8 @@ interface Props {
   template: TemplateSnapshot;
   risposteIniziali: RispostaSalvata[];
   nominativiIniziali: Nominativi;
+  impreseIniziali: ImpresaAppalto[];
+  risposteImpreseIniziali: RispostaImpresaAppalto[];
 }
 
 const DEBOUNCE_MS = 800;
@@ -58,6 +82,8 @@ export default function ChecklistClient({
   template,
   risposteIniziali,
   nominativiIniziali,
+  impreseIniziali,
+  risposteImpreseIniziali,
 }: Props) {
   const sezioni = [...template.sezioni].sort((a, b) => a.ordine - b.ordine);
   const chiusa = stato !== "bozza";
@@ -89,6 +115,23 @@ export default function ChecklistClient({
   });
 
   const [nominativi, setNominativi] = useState<Nominativi>(nominativiIniziali);
+
+  // SEZ-08 multi-impresa (Sprint 9.1): elenco imprese + risposte per impresa.
+  const [imprese, setImprese] = useState<ImpresaAppalto[]>(impreseIniziali);
+  const [risposteImprese, setRisposteImprese] = useState<
+    Record<string, Record<string, ImpEntry>>
+  >(() => {
+    const map: Record<string, Record<string, ImpEntry>> = {};
+    for (const r of risposteImpreseIniziali) {
+      (map[r.impresaId] ??= {})[r.domandaId] = {
+        esito: r.esito,
+        azione: r.azioneCorrettiva ?? "",
+        osservazione: r.osservazione ?? "",
+      };
+    }
+    return map;
+  });
+
   const [sezioneCorrente, setSezioneCorrente] = useState(0);
   const [salvataggio, setSalvataggio] = useState<Stato>("idle");
   const [erroreMsg, setErroreMsg] = useState<string | null>(null);
@@ -145,9 +188,78 @@ export default function ChecklistClient({
     });
   }
 
+  // ── SEZ-08 multi-impresa: CRUD imprese + autosave risposte ───────────────
+  async function handleAddImpresa(
+    ragioneSociale: string,
+    tipo: TipoImpresa
+  ): Promise<string | null> {
+    const res = await creaImpresaAction(visitaId, ragioneSociale, tipo);
+    if (!res.ok) {
+      setSalvataggio("error");
+      setErroreMsg(res.error);
+      return null;
+    }
+    setImprese((prev) => [...prev, res.impresa]);
+    return res.impresa.id;
+  }
+
+  async function handleRemoveImpresa(impresaId: string): Promise<void> {
+    const res = await eliminaImpresaAction(impresaId);
+    if (!res.ok) {
+      setSalvataggio("error");
+      setErroreMsg(res.error);
+      return;
+    }
+    setImprese((prev) => prev.filter((i) => i.id !== impresaId));
+    setRisposteImprese((prev) => {
+      const next = { ...prev };
+      delete next[impresaId];
+      return next;
+    });
+  }
+
+  function handleChangeRispostaImpresa(
+    impresaId: string,
+    domandaId: string,
+    patch: Partial<ImpEntry>
+  ) {
+    const corrente = risposteImprese[impresaId]?.[domandaId] ?? IMP_ENTRY_VUOTA;
+    const entry: ImpEntry = { ...corrente, ...patch };
+    setRisposteImprese((prev) => ({
+      ...prev,
+      [impresaId]: { ...(prev[impresaId] ?? {}), [domandaId]: entry },
+    }));
+    // Si salva solo quando c'è un esito (colonna NOT NULL lato DB).
+    if (!entry.esito) return;
+    pianifica(`imp:${impresaId}:${domandaId}`, async () => {
+      const res = await salvaRispostaImpresaAction({
+        impresaId,
+        domandaId,
+        esito: entry.esito as EsitoRisposta,
+        osservazione: entry.osservazione.trim() ? entry.osservazione : null,
+        azioneCorrettiva: entry.azione.trim() ? entry.azione : null,
+      });
+      setSalvataggio(res.ok ? "saved" : "error");
+      if (!res.ok) setErroreMsg(res.error);
+    });
+  }
+
+  /** Id delle domande ripetute per impresa (tutte tranne la filtro). */
+  function domandeImpresa(sez: {
+    domanda_filtro?: string;
+    domande: { id: string }[];
+  }): string[] {
+    return sez.domande.map((d) => d.id).filter((id) => id !== sez.domanda_filtro);
+  }
+
   const sezione = sezioni[sezioneCorrente];
   const isUltima = sezioneCorrente === sezioni.length - 1;
   const isSezNominativi = sezione.id === SEZIONE_NOMINATIVI;
+  // SEZ-08 multi-impresa: la sezione, se espansa, mostra l'elenco imprese al
+  // posto delle domande D-08-002..009 (gestite per impresa).
+  const isMultiImpresa = Boolean(sezione.multi_impresa);
+  const sezioneEspansaMulti =
+    isMultiImpresa && !sezioneCollassata(sezione, valoreFiltro(sezione));
 
   /** Valore corrente della domanda filtro di una sezione (null se nessuna filtro). */
   function valoreFiltro(sez: { domanda_filtro?: string }): EsitoRisposta | null {
@@ -163,7 +275,38 @@ export default function ChecklistClient({
     if (sez && sezioneCollassata(sez, valoreFiltro(sez))) {
       const f = risposte[sez.domanda_filtro!];
       const data = rispostaCompleta(f?.valore ?? null, f?.azione, f?.osservazioni);
-      return { date: data ? 1 : 0, totale: 1, collassata: true };
+      return { date: data ? 1 : 0, totale: 1, collassata: true, completa: data };
+    }
+    // SEZ-08 multi-impresa espansa: progresso = filtro + (8 domande × N imprese).
+    // Il denominatore usa almeno 1 impresa, così con 0 imprese non risulta mai
+    // completa e la pill segnala che manca lavoro.
+    if (sez?.multi_impresa) {
+      const f = risposte[sez.domanda_filtro!];
+      const filtroOk = rispostaCompleta(f?.valore ?? null, f?.azione, f?.osservazioni);
+      const dids = domandeImpresa(sez);
+      const getR = (impId: string, did: string) => {
+        const e = risposteImprese[impId]?.[did];
+        return e
+          ? { esito: e.esito, azioneCorrettiva: e.azione, osservazione: e.osservazione }
+          : null;
+      };
+      // Una domanda-impresa conta come "data" solo se completa (esito + testo
+      // obbligatorio: azione per NC/PC, motivazione per NV/NA).
+      let risposteDate = 0;
+      for (const imp of imprese)
+        for (const did of dids) {
+          const r = getR(imp.id, did);
+          if (rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione))
+            risposteDate += 1;
+        }
+      const { completa: impreseComplete } = completezzaImpreseSezioneOtto(
+        dids,
+        imprese.map((i) => i.id),
+        getR
+      );
+      const totale = 1 + dids.length * Math.max(imprese.length, 1);
+      const date = (filtroOk ? 1 : 0) + risposteDate;
+      return { date, totale, collassata: false, completa: filtroOk && impreseComplete };
     }
     // Una domanda conta come "data" solo se completa (esito + eventuale
     // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
@@ -171,7 +314,12 @@ export default function ChecklistClient({
       const e = risposte[d.id];
       return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
     }).length;
-    return { date, totale: domande.length, collassata: false };
+    return {
+      date,
+      totale: domande.length,
+      collassata: false,
+      completa: domande.length > 0 && date === domande.length,
+    };
   }
 
   function vaiASezione(i: number) {
@@ -211,8 +359,7 @@ export default function ChecklistClient({
         {/* Navigazione sezioni — scroll orizzontale su mobile */}
         <nav className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {sezioni.map((s, i) => {
-            const { date, totale, collassata } = progresso(s.id);
-            const completa = totale > 0 && date === totale;
+            const { date, totale, collassata, completa } = progresso(s.id);
             const attiva = i === sezioneCorrente;
             return (
               <button
@@ -268,6 +415,9 @@ export default function ChecklistClient({
             // Logica condizionale di sezione: se la sezione è collassata
             // (filtro = NA) mostra solo la domanda filtro. Reattivo lato client.
             .filter((d) => domandaAttiva(sezione, d.id, valoreFiltro(sezione)))
+            // Multi-impresa: le domande successive alla filtro sono gestite
+            // per impresa nel componente dedicato, non come card di sezione.
+            .filter((d) => !isMultiImpresa || d.id === sezione.domanda_filtro)
             .map((d) => {
               const entry = risposte[d.id];
               return (
@@ -302,6 +452,25 @@ export default function ChecklistClient({
                 />
               );
             })}
+
+          {/* SEZ-08 multi-impresa: elenco imprese + schede risposte per impresa.
+              Renderizzato solo a sezione espansa (filtro ≠ NA). */}
+          {sezioneEspansaMulti && (
+            <SezioneAppaltiImprese
+              domande={sezione.domande
+                .filter((d) => d.id !== sezione.domanda_filtro)
+                // Nel modello multi-impresa l'impresa è già identificata dalla
+                // sua anagrafica: il campo_extra "elenco imprese" (legacy D-08-003)
+                // non va mostrato come testo libero per ogni impresa.
+                .map((d) => ({ ...d, campo_extra: undefined }))}
+              imprese={imprese}
+              risposte={risposteImprese}
+              disabled={chiusa}
+              onAdd={handleAddImpresa}
+              onRemove={handleRemoveImpresa}
+              onChange={handleChangeRispostaImpresa}
+            />
+          )}
         </div>
       </div>
 

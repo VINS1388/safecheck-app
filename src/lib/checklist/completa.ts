@@ -71,3 +71,51 @@ export function domandaAttiva(
   if (!sezioneCollassata(sezione, valoreFiltro)) return true;
   return domandaId === sezione.domanda_filtro;
 }
+
+// ── Completezza modello multi-impresa SEZ-08 (Sprint 9.1) ──────────────────
+//
+// Quando SEZ-08 è espansa e multi_impresa, le domande successive alla filtro
+// (D-08-002..009) sono ripetute per ogni impresa inserita. La sezione è
+// completa SSE c'è almeno 1 impresa e, per ogni impresa, ogni domanda è
+// completa secondo la STESSA regola delle domande standard (`rispostaCompleta`):
+// esito presente + campo testo obbligatorio (azione correttiva per NC/PC,
+// motivazione per NV/NA). Una domanda NC/PC senza azione_correttiva conta
+// quindi come mancante, esattamente come nella checklist principale.
+
+/** Risposta di una domanda-impresa nella forma minima utile alla completezza. */
+export interface RispostaImpresaSlot {
+  esito: EsitoRisposta | null | undefined;
+  azioneCorrettiva?: string | null;
+  osservazione?: string | null;
+}
+
+/**
+ * @param domandeIds   id delle domande ripetute per impresa (es. D-08-002..009)
+ * @param impreseIds   id delle imprese inserite per la visita
+ * @param getRisposta  accessor: risposta per (impresa, domanda) — null se assente
+ * @returns `mancanti` (> 0 se incompleta) e `completa`.
+ */
+export function completezzaImpreseSezioneOtto(
+  domandeIds: string[],
+  impreseIds: string[],
+  getRisposta: (
+    impresaId: string,
+    domandaId: string
+  ) => RispostaImpresaSlot | null | undefined
+): { mancanti: number; completa: boolean } {
+  // Nessuna impresa a sezione espansa: incompleta. Si conta come mancante un
+  // intero set di domande, per segnalare "almeno un'impresa da inserire".
+  if (impreseIds.length === 0) {
+    return { mancanti: domandeIds.length, completa: false };
+  }
+  let mancanti = 0;
+  for (const impId of impreseIds) {
+    for (const did of domandeIds) {
+      const r = getRisposta(impId, did);
+      if (!rispostaCompleta(r?.esito ?? null, r?.azioneCorrettiva, r?.osservazione)) {
+        mancanti += 1;
+      }
+    }
+  }
+  return { mancanti, completa: mancanti === 0 };
+}

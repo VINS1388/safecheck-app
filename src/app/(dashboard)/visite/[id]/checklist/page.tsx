@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
+import {
+  getImpreseByVisita,
+  getRisposteImpreseByVisita,
+} from "@/lib/db/queries/imprese";
 import ChecklistClient from "./ChecklistClient";
 
 export default async function ChecklistPage({
@@ -17,6 +21,8 @@ export default async function ChecklistPage({
 
   const risposte = await getRisposteByVisita(id);
   const nominativi = estraiNominativi(risposte);
+  const imprese = await getImpreseByVisita(id);
+  const risposteImprese = await getRisposteImpreseByVisita(id);
 
   return (
     <ChecklistClient
@@ -35,6 +41,8 @@ export default async function ChecklistPage({
       template={visita.template_snapshot}
       risposteIniziali={risposte}
       nominativiIniziali={nominativi}
+      impreseIniziali={imprese}
+      risposteImpreseIniziali={risposteImprese}
     />
   );
 }

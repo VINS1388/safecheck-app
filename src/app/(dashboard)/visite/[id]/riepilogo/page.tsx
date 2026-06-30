@@ -2,7 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getVisitaById } from "@/lib/db/queries/visite";
 import { getRisposteByVisita } from "@/lib/db/queries/risposte";
-import { richiedeTesto, sezioneCollassata } from "@/lib/checklist/completa";
+import {
+  getImpreseByVisita,
+  getRisposteImpreseByVisita,
+} from "@/lib/db/queries/imprese";
+import {
+  richiedeTesto,
+  sezioneCollassata,
+  completezzaImpreseSezioneOtto,
+} from "@/lib/checklist/completa";
 import type { EsitoRisposta } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
@@ -36,6 +44,13 @@ export default async function RiepilogoPage({
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
 
+  // SEZ-08 multi-impresa: imprese + risposte per impresa (vuote per legacy v1).
+  const imprese = await getImpreseByVisita(id);
+  const risposteImprese = await getRisposteImpreseByVisita(id);
+  const rispostaImpresaPer = new Map(
+    risposteImprese.map((r) => [`${r.impresaId}:${r.domandaId}`, r])
+  );
+
   const sezioni = [...visita.template_snapshot.sezioni].sort(
     (a, b) => a.ordine - b.ordine
   );
@@ -59,9 +74,12 @@ export default async function RiepilogoPage({
       ? ((rispostaPer.get(sez.domanda_filtro)?.valore ?? null) as EsitoRisposta | null)
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
+    const multiEspansa = Boolean(sez.multi_impresa) && !collassata;
 
     for (const d of sez.domande) {
       if (collassata && d.id !== sez.domanda_filtro) continue;
+      // Multi-impresa: le D-08-002..009 sono aggregate sotto, per impresa.
+      if (multiEspansa && d.id !== sez.domanda_filtro) continue;
       const r = rispostaPer.get(d.id);
       const v = (r?.valore ?? null) as EsitoRisposta | null;
       if (v === null) {
@@ -75,6 +93,24 @@ export default async function RiepilogoPage({
           c.campoMancante += 1;
         }
       }
+    }
+
+    // Multi-impresa espansa: aggrega le risposte di tutte le imprese (N × 8)
+    // nei conteggi della sezione e somma le slot mancanti come obbligatorie.
+    if (multiEspansa) {
+      for (const r of risposteImprese) {
+        c[r.esito] += 1;
+      }
+      const dids = sez.domande
+        .filter((d) => d.id !== sez.domanda_filtro)
+        .map((d) => d.id);
+      const { mancanti } = completezzaImpreseSezioneOtto(
+        dids,
+        imprese.map((i) => i.id),
+        (impId, did) => rispostaImpresaPer.get(`${impId}:${did}`) ?? null
+      );
+      c.obbligatorieSenzaRisposta += mancanti;
+      c.nonRisposto += mancanti;
     }
     return c;
   });

@@ -1,6 +1,12 @@
 import PDFDocument from "pdfkit";
-import type { EsitoRisposta, Nominativi, TemplateSnapshot } from "@/types";
-import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI } from "@/types";
+import type {
+  EsitoRisposta,
+  ImpresaAppalto,
+  Nominativi,
+  RispostaImpresaAppalto,
+  TemplateSnapshot,
+} from "@/types";
+import { FIGURE_SICUREZZA, SEZIONE_NOMINATIVI, ETICHETTE_TIPO_IMPRESA } from "@/types";
 import { sezioneCollassata } from "@/lib/checklist/completa";
 
 export interface VerbaleRisposta {
@@ -26,6 +32,9 @@ export interface VerbaleData {
   nominativi: Nominativi;
   template: TemplateSnapshot;
   risposte: Record<string, VerbaleRisposta>;
+  // SEZ-08 multi-impresa (Sprint 9.1). Assenti per visite legacy v1.
+  impreseAppalto?: ImpresaAppalto[];
+  risposteImprese?: RispostaImpresaAppalto[];
 }
 
 const BRAND = "#1e3a5f";
@@ -262,10 +271,13 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
       ? dati.risposte[sez.domanda_filtro]?.esito ?? null
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
+    // Multi-impresa espansa: come per il collasso, fra le card di sezione si
+    // stampa solo la domanda filtro; le D-08-002..009 vanno per impresa sotto.
+    const soloFiltro = collassata || (Boolean(sez.multi_impresa) && !collassata);
 
     const domande = [...sez.domande]
       .sort((a, b) => a.ordine - b.ordine)
-      .filter((d) => !collassata || d.id === sez.domanda_filtro);
+      .filter((d) => !soloFiltro || d.id === sez.domanda_filtro);
     for (const d of domande) {
       assicuraSpazio(doc, 70);
 
@@ -346,6 +358,96 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
       rigaSottile(doc);
       doc.moveDown(0.5);
     }
+
+    // Multi-impresa (Sprint 9.1): dopo la domanda filtro, una sotto-sezione per
+    // ogni impresa con le sue risposte alle domande D-08-002..009.
+    if (sez.multi_impresa && !collassata) {
+      renderImpreseAppalto(doc, sez, dati);
+    }
+  });
+}
+
+// ── Sotto-sezioni per impresa (SEZ-08 multi-impresa) ──────────────────────
+function renderImpreseAppalto(doc: Doc, sez: VerbaleData["template"]["sezioni"][number], dati: VerbaleData): void {
+  const imprese = [...(dati.impreseAppalto ?? [])].sort((a, b) => a.ordine - b.ordine);
+  const domande = [...sez.domande]
+    .filter((d) => d.id !== sez.domanda_filtro)
+    .sort((a, b) => a.ordine - b.ordine);
+
+  // Indicizza le risposte per impresa+domanda.
+  const perImpresa = new Map<string, Map<string, RispostaImpresaAppalto>>();
+  for (const r of dati.risposteImprese ?? []) {
+    if (!perImpresa.has(r.impresaId)) perImpresa.set(r.impresaId, new Map());
+    perImpresa.get(r.impresaId)!.set(r.domandaId, r);
+  }
+
+  if (imprese.length === 0) {
+    doc.x = MARGINE;
+    doc
+      .font("Helvetica-Oblique")
+      .fontSize(9.5)
+      .fillColor(GRIGIO)
+      .text("Nessuna impresa in appalto registrata.", { width: larghezzaContenuto(doc) });
+    doc.moveDown(0.5);
+    return;
+  }
+
+  imprese.forEach((imp) => {
+    assicuraSpazio(doc, 80);
+    doc.x = MARGINE;
+
+    // Intestazione impresa
+    const tipo = ETICHETTE_TIPO_IMPRESA[imp.tipoImpresa] ?? imp.tipoImpresa;
+    doc
+      .fillColor(NERO)
+      .font("Helvetica-Bold")
+      .fontSize(12)
+      .text(imp.ragioneSociale, { width: larghezzaContenuto(doc) });
+    doc.fillColor(GRIGIO).font("Helvetica-Oblique").fontSize(9).text(tipo);
+    doc.moveDown(0.4);
+
+    const risp = perImpresa.get(imp.id);
+    for (const d of domande) {
+      assicuraSpazio(doc, 60);
+      doc.x = MARGINE;
+      const r = risp?.get(d.id) ?? null;
+      const esito = r?.esito ?? null;
+
+      doc
+        .fillColor(NERO)
+        .font("Helvetica")
+        .fontSize(10.5)
+        .text(d.testo, { width: larghezzaContenuto(doc) });
+      doc.moveDown(0.2);
+
+      const colore = esito ? COLORE_ESITO[esito] : GRIGIO;
+      const testoEsito = esito ? `${esito} — ${ETICHETTA_ESITO[esito]}` : "Nessuna risposta";
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(colore).text(testoEsito);
+
+      if ((esito === "NC" || esito === "PC") && r?.azioneCorrettiva) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Azione correttiva: ${r.azioneCorrettiva}`, {
+            width: larghezzaContenuto(doc),
+          });
+      }
+      if ((esito === "NV" || esito === "NA") && r?.osservazione) {
+        doc.moveDown(0.1);
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(9.5)
+          .fillColor(GRIGIO)
+          .text(`Motivazione: ${r.osservazione}`, { width: larghezzaContenuto(doc) });
+      }
+
+      doc.moveDown(0.5);
+      rigaSottile(doc);
+      doc.moveDown(0.5);
+    }
+    doc.moveDown(0.4);
   });
 }
 
@@ -421,10 +523,21 @@ function renderRilieviConclusivi(doc: Doc, dati: VerbaleData): void {
       ? dati.risposte[sez.domanda_filtro]?.esito ?? null
       : null;
     const collassata = sezioneCollassata(sez, valoreFiltro);
-    for (const d of sez.domande) {
-      if (collassata && d.id !== sez.domanda_filtro) continue;
-      const esito = dati.risposte[d.id]?.esito;
-      if (esito) conteggi[esito] += 1;
+
+    if (sez.multi_impresa && !collassata) {
+      // Multi-impresa espansa: filtro + tutte le risposte di tutte le imprese
+      // (N × 8). L'aggregato riflette la somma reale dei giudizi.
+      const fe = sez.domanda_filtro ? dati.risposte[sez.domanda_filtro]?.esito : null;
+      if (fe) conteggi[fe] += 1;
+      for (const r of dati.risposteImprese ?? []) {
+        conteggi[r.esito] += 1;
+      }
+    } else {
+      for (const d of sez.domande) {
+        if (collassata && d.id !== sez.domanda_filtro) continue;
+        const esito = dati.risposte[d.id]?.esito;
+        if (esito) conteggi[esito] += 1;
+      }
     }
     totNC += conteggi.NC;
     totPC += conteggi.PC;

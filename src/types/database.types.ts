@@ -124,6 +124,85 @@ export type Database = {
           },
         ]
       }
+      imprese_appalto: {
+        Row: {
+          aggiornato_il: string
+          creato_il: string
+          id: string
+          ordine: number
+          ragione_sociale: string
+          tipo_impresa: string
+          visita_id: string
+        }
+        Insert: {
+          aggiornato_il?: string
+          creato_il?: string
+          id?: string
+          ordine?: number
+          ragione_sociale: string
+          tipo_impresa: string
+          visita_id: string
+        }
+        Update: {
+          aggiornato_il?: string
+          creato_il?: string
+          id?: string
+          ordine?: number
+          ragione_sociale?: string
+          tipo_impresa?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imprese_appalto_visita_id_fkey"
+            columns: ["visita_id"]
+            isOneToOne: false
+            referencedRelation: "visite"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      risposte_imprese_appalto: {
+        Row: {
+          aggiornato_il: string
+          azione_correttiva: string | null
+          creato_il: string
+          domanda_id: string
+          esito: Database["public"]["Enums"]["esito_risposta"]
+          id: string
+          impresa_id: string
+          osservazione: string | null
+        }
+        Insert: {
+          aggiornato_il?: string
+          azione_correttiva?: string | null
+          creato_il?: string
+          domanda_id: string
+          esito: Database["public"]["Enums"]["esito_risposta"]
+          id?: string
+          impresa_id: string
+          osservazione?: string | null
+        }
+        Update: {
+          aggiornato_il?: string
+          azione_correttiva?: string | null
+          creato_il?: string
+          domanda_id?: string
+          esito?: Database["public"]["Enums"]["esito_risposta"]
+          id?: string
+          impresa_id?: string
+          osservazione?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risposte_imprese_appalto_impresa_id_fkey"
+            columns: ["impresa_id"]
+            isOneToOne: false
+            referencedRelation: "imprese_appalto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       punteggi_sezione: {
         Row: {
           calcolato_il: string
