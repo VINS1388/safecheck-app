@@ -2,6 +2,8 @@ import PDFDocument from "pdfkit";
 import type {
   EsitoRisposta,
   ImpresaAppalto,
+  Lavoratore,
+  LivelloRischio,
   NominativiStrutturati,
   RispostaImpresaAppalto,
   TemplateSnapshot,
@@ -14,6 +16,7 @@ import {
 import { sezioneCollassata, domandaGateAttiva } from "@/lib/checklist/completa";
 import { normalizzaNominativi } from "@/lib/nominativi";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
+import { valutaConformitaDaScadenza } from "@/lib/scadenze/calcola";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
@@ -42,6 +45,8 @@ export interface VerbaleData {
   // SEZ-08 multi-impresa (Sprint 9.1). Assenti per visite legacy v1.
   impreseAppalto?: ImpresaAppalto[];
   risposteImprese?: RispostaImpresaAppalto[];
+  // Formazione lavoratori (Sprint 14). Assenti per visite legacy ≤ v8.
+  lavoratori?: Lavoratore[];
 }
 
 const BRAND = "#1e3a5f";
@@ -77,6 +82,25 @@ function formatData(d: string): string {
     return d;
   }
 }
+
+/** Data compatta gg/mm/aaaa (per le celle di tabella). */
+function formatDataBreve(d: string): string {
+  try {
+    return new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(d));
+  } catch {
+    return d;
+  }
+}
+
+const ETICHETTA_RISCHIO: Record<LivelloRischio, string> = {
+  basso: "Basso",
+  medio: "Medio",
+  alto: "Alto",
+};
 
 type Doc = InstanceType<typeof PDFDocument>;
 
@@ -400,6 +424,9 @@ function renderSezioni(doc: Doc, dati: VerbaleData): void {
     // per figura, una riga per ogni nominativo di SEZ-01.
     if (sez.formazione_per_nominativo) {
       renderFormazioneNominativi(doc, sez, dati);
+      // Formazione lavoratori (Sprint 14): tabella riepilogativa dopo le altre
+      // domande di formazione. Self-gated (solo snapshot v9+ con D-03-001 iterata).
+      renderTabellaLavoratori(doc, sez, dati);
     }
   });
 }
@@ -478,6 +505,103 @@ function renderFormazioneNominativi(
     }
     doc.moveDown(0.3);
   }
+}
+
+// ── Tabella formazione lavoratori (SEZ-03, Sprint 14) ─────────────────────
+const COL_LAV = [
+  { key: "nome", label: "Nome e cognome", x: MARGINE, w: 130 },
+  { key: "mansione", label: "Mansione", x: MARGINE + 130, w: 115 },
+  { key: "rischio", label: "Rischio", x: MARGINE + 245, w: 55 },
+  { key: "data", label: "Data formazione", x: MARGINE + 300, w: 105 },
+  { key: "stato", label: "Stato", x: MARGINE + 405, w: 90 },
+] as const;
+
+// Evidenziazione riga per esito (NC rosso chiaro, PC amber chiaro, C bianco).
+const BG_STATO: Record<"C" | "PC" | "NC", string | null> = {
+  C: null,
+  PC: "#fef3c7",
+  NC: "#fee2e2",
+};
+
+const RIGA_LAV = 20;
+
+function renderTabellaLavoratori(
+  doc: Doc,
+  sez: VerbaleData["template"]["sezioni"][number],
+  dati: VerbaleData
+): void {
+  const nodo = sez.domande.find((d) => d.formazione_lavoratori);
+  if (!nodo) return; // snapshot legacy ≤ v8: nessuna formazione lavoratori
+
+  assicuraSpazio(doc, 60);
+  doc.x = MARGINE;
+  doc.fillColor(NERO).font("Helvetica-Bold").fontSize(11).text("Formazione lavoratori");
+  doc.moveDown(0.4);
+
+  const lavoratori = dati.lavoratori ?? [];
+  if (lavoratori.length === 0) {
+    doc
+      .fillColor(GRIGIO)
+      .font("Helvetica-Oblique")
+      .fontSize(9.5)
+      .text("Nessun lavoratore registrato.");
+    doc.moveDown(0.5);
+    return;
+  }
+
+  const larghezza = larghezzaContenuto(doc);
+  const cell = (testo: string, x: number, y: number, w: number) =>
+    doc.text(testo, x + 4, y + 6, { width: w - 8, lineBreak: false, ellipsis: true });
+
+  const intestazione = (y: number) => {
+    doc.rect(MARGINE, y, larghezza, RIGA_LAV).fill("#f3f4f6");
+    doc.fillColor(GRIGIO).font("Helvetica-Bold").fontSize(8.5);
+    for (const c of COL_LAV) cell(c.label, c.x, y, c.w);
+  };
+
+  const fondo = doc.page.height - MARGINE - 30;
+  let y = doc.y;
+  intestazione(y);
+  y += RIGA_LAV;
+
+  for (const l of lavoratori) {
+    if (y + RIGA_LAV > fondo) {
+      doc.addPage();
+      y = MARGINE;
+      intestazione(y);
+      y += RIGA_LAV;
+    }
+    const esito = l.dataFormazione
+      ? valutaConformitaDaScadenza(
+          l.dataFormazione,
+          nodo.periodicita_mesi ?? null,
+          dati.visita.data_visita,
+          nodo.soglia_pc_giorni ?? 60
+        )
+      : null;
+    const bg = esito ? BG_STATO[esito] : null;
+    if (bg) doc.rect(MARGINE, y, larghezza, RIGA_LAV).fill(bg);
+
+    doc.fillColor(NERO).font("Helvetica").fontSize(9);
+    cell(l.nome, COL_LAV[0].x, y, COL_LAV[0].w);
+    cell(l.mansione || "—", COL_LAV[1].x, y, COL_LAV[1].w);
+    cell(ETICHETTA_RISCHIO[l.livelloRischio], COL_LAV[2].x, y, COL_LAV[2].w);
+    cell(l.dataFormazione ? formatDataBreve(l.dataFormazione) : "—", COL_LAV[3].x, y, COL_LAV[3].w);
+
+    doc.fillColor(esito ? COLORE_ESITO[esito] : GRIGIO).font("Helvetica-Bold");
+    cell(esito ?? "—", COL_LAV[4].x, y, COL_LAV[4].w);
+
+    doc
+      .moveTo(MARGINE, y + RIGA_LAV)
+      .lineTo(MARGINE + larghezza, y + RIGA_LAV)
+      .strokeColor("#e5e7eb")
+      .lineWidth(0.5)
+      .stroke();
+    y += RIGA_LAV;
+  }
+
+  doc.y = y;
+  doc.moveDown(0.6);
 }
 
 // ── Sotto-sezioni per impresa (SEZ-08 multi-impresa) ──────────────────────

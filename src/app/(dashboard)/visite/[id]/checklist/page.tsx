@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { getVisitaById } from "@/lib/db/queries/visite";
-import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
+import {
+  getRisposteByVisita,
+  estraiNominativi,
+  estraiLavoratori,
+} from "@/lib/db/queries/risposte";
 import {
   getImpreseByVisita,
   getRisposteImpreseByVisita,
@@ -21,6 +25,7 @@ export default async function ChecklistPage({
 
   const risposte = await getRisposteByVisita(id);
   const nominativi = estraiNominativi(risposte);
+  const lavoratori = estraiLavoratori(risposte);
   const imprese = await getImpreseByVisita(id);
   const risposteImprese = await getRisposteImpreseByVisita(id);
 
@@ -41,6 +46,7 @@ export default async function ChecklistPage({
       template={visita.template_snapshot}
       risposteIniziali={risposte}
       nominativiIniziali={nominativi}
+      lavoratoriIniziali={lavoratori}
       impreseIniziali={imprese}
       risposteImpreseIniziali={risposteImprese}
     />

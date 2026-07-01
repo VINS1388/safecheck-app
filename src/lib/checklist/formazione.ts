@@ -111,6 +111,13 @@ export function genericheFormazione(
 ): DomandaTemplate[] {
   const merged = dlCoincideRspp(nominativi);
   return sezione.domande
-    .filter((d) => !d.figura_nominativo && !(merged && d.id === Q_DLSPP))
+    .filter(
+      (d) =>
+        !d.figura_nominativo &&
+        !(merged && d.id === Q_DLSPP) &&
+        // D-03-001 (formazione_lavoratori, Sprint 14) è iterata per lavoratore,
+        // non è una domanda generica diretta.
+        !d.formazione_lavoratori
+    )
     .sort((a, b) => a.ordine - b.ordine);
 }

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   salvaRisposta,
   salvaNominativi,
+  salvaLavoratori,
   salvaRispostaFormazione,
   eliminaRisposta,
 } from "@/lib/db/queries/risposte";
@@ -15,6 +16,7 @@ import {
 import type {
   EsitoRisposta,
   ImpresaAppalto,
+  Lavoratore,
   NominativiStrutturati,
   TipoImpresa,
 } from "@/types";
@@ -74,6 +76,24 @@ export async function salvaNominativiAction(
 
   try {
     await salvaNominativi(visitaId, nominativi);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Autosave dell'elenco lavoratori (SEZ-01, Sprint 14). */
+export async function salvaLavoratoriAction(
+  visitaId: string,
+  lavoratori: Lavoratore[]
+): Promise<SalvaRispostaResult> {
+  const { user } = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  }
+  try {
+    await salvaLavoratori(visitaId, lavoratori);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Errore di rete durante il salvataggio.";

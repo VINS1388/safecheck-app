@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { EsitoRisposta, NominativiStrutturati } from "@/types";
-import { DOMANDA_NOMINATIVI, SEZIONE_NOMINATIVI } from "@/types";
+import type { EsitoRisposta, Lavoratore, NominativiStrutturati } from "@/types";
+import { DOMANDA_LAVORATORI, DOMANDA_NOMINATIVI, SEZIONE_NOMINATIVI } from "@/types";
 import { normalizzaNominativi } from "@/lib/nominativi";
+import { normalizzaLavoratori } from "@/lib/lavoratori";
 
 /** Stato di una singola risposta come salvato/letto dal DB. */
 export interface RispostaSalvata {
@@ -130,6 +131,40 @@ export async function salvaNominativi(
   if (error) {
     throw new Error(`Errore salvataggio nominativi: ${error.message}`);
   }
+}
+
+/**
+ * Salva l'elenco lavoratori (SEZ-01) come riga sintetica in `risposte`, con i
+ * dati in `campo_extra` (forma `{ lavoratori: [...] }`). Stesso pattern dei
+ * nominativi figure sicurezza (Sprint 14).
+ */
+export async function salvaLavoratori(
+  visitaId: string,
+  lavoratori: Lavoratore[]
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("risposte").upsert(
+    {
+      visita_id: visitaId,
+      domanda_id: DOMANDA_LAVORATORI,
+      sezione_id: SEZIONE_NOMINATIVI, // "SEZ-01"
+      valore: null,
+      campo_extra: { lavoratori },
+      aggiornata_il: new Date().toISOString(),
+    },
+    { onConflict: "visita_id,domanda_id" }
+  );
+
+  if (error) {
+    throw new Error(`Errore salvataggio lavoratori: ${error.message}`);
+  }
+}
+
+/** Estrae e normalizza l'elenco lavoratori dalla riga sintetica SEZ-01-LAV. */
+export function estraiLavoratori(risposte: RispostaSalvata[]): Lavoratore[] {
+  const riga = risposte.find((r) => r.domanda_id === DOMANDA_LAVORATORI);
+  return normalizzaLavoratori(riga?.campo_extra ?? null);
 }
 
 /** Tutte le risposte già salvate per una visita (inclusa la riga nominativi). */

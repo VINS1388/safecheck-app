@@ -39,6 +39,11 @@ export interface DomandaTemplate {
   // di collasso di sezione di SEZ-08.
   gated_by?: string;
   gate_collassa_su?: string[];
+  // Marker Sprint 14: D-03-001 derivata per lavoratore dall'elenco lavoratori di
+  // SEZ-01 (riga sintetica SEZ-01-LAV). Analogo a `figura_nominativo` ma la fonte
+  // è la lista lavoratori (non una figura di FIGURE_SICUREZZA). Esito C/PC/NC
+  // sempre calcolato (calcolo_automatico), nessun NA/NV manuale.
+  formazione_lavoratori?: boolean;
   // Mostra un campo data strutturato (es. data ultimo sopralluogo MC). Solo
   // dato, persistito su risposte.campo_extra.data_verifica.
   campo_data?: boolean;
@@ -164,6 +169,23 @@ export type NominativiStrutturati = Record<string, Nominativo[]>;
 
 /** Id della "domanda" fittizia che archivia i nominativi di SEZ-01. */
 export const DOMANDA_NOMINATIVI = "SEZ-01-NOMINATIVI";
+
+// ── Lavoratori (SEZ-01 — elenco per formazione D-03-001, Sprint 14) ────────
+
+/** Livello di rischio del lavoratore (determina le ore di formazione, non il calcolo scadenza). */
+export type LivelloRischio = "basso" | "medio" | "alto";
+
+/** Un lavoratore dell'azienda, con la sua formazione. Id stabile (come i nominativi). */
+export interface Lavoratore {
+  id: string;
+  nome: string; // nome e cognome
+  mansione: string;
+  livelloRischio: LivelloRischio;
+  dataFormazione: string; // ISO yyyy-mm-dd (fonte del calcolo automatico C/PC/NC)
+}
+
+/** Id della "domanda" fittizia che archivia l'elenco lavoratori di SEZ-01. */
+export const DOMANDA_LAVORATORI = "SEZ-01-LAV";
 
 /** Separatore per il domanda_id composito delle risposte formazione per-nominativo. */
 export const SEP_FORMAZIONE = "::";

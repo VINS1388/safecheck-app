@@ -6,8 +6,8 @@
 // Legge periodicità/soglia dallo SNAPSHOT del template (immutabile per visita),
 // mai dal template_master live. NA/NV sono manuali e non vengono mai toccati.
 
-import type { DomandaTemplate, TemplateSnapshot } from "@/types";
-import { SEP_FORMAZIONE } from "@/types";
+import type { DomandaTemplate, Lavoratore, TemplateSnapshot } from "@/types";
+import { SEP_FORMAZIONE, idRispostaFormazione } from "@/types";
 import { valutaConformitaDaScadenza } from "@/lib/scadenze/calcola";
 
 export interface RispostaCalcolo {
@@ -36,16 +36,29 @@ export function domandaBaseId(domandaId: string): string {
   return i < 0 ? domandaId : domandaId.slice(0, i);
 }
 
+/** Nodo domanda con marker `formazione_lavoratori` (Sprint 14), se presente. */
+function nodoLavoratori(snapshot: TemplateSnapshot): DomandaTemplate | null {
+  for (const s of snapshot.sezioni)
+    for (const d of s.domande) if (d.formazione_lavoratori) return d;
+  return null;
+}
+
 /**
  * Ricalcola l'esito delle risposte a domande `calcolo_automatico` contro
  * `dataVisita` (data sopralluogo). Ritorna SOLO le risposte da aggiornare
  * (nuovoValore ≠ vecchioValore). Esclude NA/NV (manuali). Riusa
  * `valutaConformitaDaScadenza` — nessuna duplicazione della logica di soglia.
+ *
+ * Sprint 14: per la formazione lavoratori (D-03-001) la data NON è in
+ * `campo_extra` ma nell'anagrafica del lavoratore in SEZ-01 (`lavoratori`). Le
+ * righe composite `D-03-001::<lavId>` sono quindi ricalcolate leggendo
+ * `dataFormazione` dal lavoratore corrispondente (non da `r.dataVerifica`).
  */
 export function ricalcolaEsitiAutomatici(
   snapshot: TemplateSnapshot,
   risposte: RispostaCalcolo[],
-  dataVisita: string
+  dataVisita: string,
+  lavoratori: Lavoratore[] = []
 ): RicalcoloDiff[] {
   const idx = indiceDomande(snapshot);
   const out: RicalcoloDiff[] = [];
@@ -53,6 +66,9 @@ export function ricalcolaEsitiAutomatici(
     if (r.valore === "NA" || r.valore === "NV") continue; // scelta manuale
     const base = idx.get(domandaBaseId(r.domandaId));
     if (!base?.calcolo_automatico) continue;
+    // I lavoratori (formazione_lavoratori) sono gestiti sotto, dai loro dati
+    // anagrafici in SEZ-01: qui salterei con dataVerifica assente (falso negativo).
+    if (base.formazione_lavoratori) continue;
     const nuovo = r.dataVerifica
       ? valutaConformitaDaScadenza(
           r.dataVerifica,
@@ -65,5 +81,31 @@ export function ricalcolaEsitiAutomatici(
       out.push({ domandaId: r.domandaId, base, vecchioValore: r.valore, nuovoValore: nuovo });
     }
   }
+
+  // Formazione lavoratori (Sprint 14): confronta l'esito calcolato dalla data
+  // formazione del lavoratore con il valore salvato nella riga composita.
+  const nodo = nodoLavoratori(snapshot);
+  if (nodo?.calcolo_automatico && lavoratori.length > 0) {
+    const storedPer = new Map(
+      risposte
+        .filter((r) => domandaBaseId(r.domandaId) === nodo.id)
+        .map((r) => [r.domandaId, r.valore])
+    );
+    for (const l of lavoratori) {
+      if (!l.dataFormazione) continue;
+      const cid = idRispostaFormazione(nodo.id, l.id);
+      const nuovo = valutaConformitaDaScadenza(
+        l.dataFormazione,
+        nodo.periodicita_mesi ?? null,
+        dataVisita,
+        nodo.soglia_pc_giorni ?? 60
+      );
+      const vecchio = storedPer.has(cid) ? storedPer.get(cid)! : null;
+      if (nuovo !== vecchio) {
+        out.push({ domandaId: cid, base: nodo, vecchioValore: vecchio, nuovoValore: nuovo });
+      }
+    }
+  }
+
   return out;
 }

@@ -6,12 +6,13 @@ import { cn, formatDate } from "@/lib/utils";
 import type {
   EsitoRisposta,
   ImpresaAppalto,
+  Lavoratore,
   NominativiStrutturati,
   RispostaImpresaAppalto,
   TemplateSnapshot,
   TipoImpresa,
 } from "@/types";
-import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE } from "@/types";
+import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE, idRispostaFormazione } from "@/types";
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
 import {
   rispostaCompleta,
@@ -31,6 +32,7 @@ import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
 import {
   salvaRispostaAction,
   salvaNominativiAction,
+  salvaLavoratoriAction,
   creaImpresaAction,
   eliminaImpresaAction,
   salvaRispostaImpresaAction,
@@ -39,6 +41,8 @@ import {
 } from "./actions";
 import DomandaCard from "./DomandaCard";
 import NominativiSEZ01 from "./NominativiSEZ01";
+import LavoratoriSection from "./LavoratoriSection";
+import LavoratoriFormazione from "./LavoratoriFormazione";
 import SezioneAppaltiImprese, {
   type ImpEntry,
   IMP_ENTRY_VUOTA,
@@ -75,12 +79,14 @@ interface Props {
   template: TemplateSnapshot;
   risposteIniziali: RispostaSalvata[];
   nominativiIniziali: NominativiStrutturati;
+  lavoratoriIniziali: Lavoratore[];
   impreseIniziali: ImpresaAppalto[];
   risposteImpreseIniziali: RispostaImpresaAppalto[];
 }
 
 const DEBOUNCE_MS = 800;
 const KEY_NOMINATIVI = "__nominativi__";
+const KEY_LAVORATORI = "__lavoratori__";
 
 /** data_verifica da campo_extra (stringa vuota se assente). */
 function dataVerificaDa(campoExtra: unknown): string {
@@ -89,6 +95,8 @@ function dataVerificaDa(campoExtra: unknown): string {
     : "";
 }
 
+const PREFISSO_LAV = `D-03-001${SEP_FORMAZIONE}`;
+
 interface StatoIniziale {
   risposte: Record<string, Entry>;
   formazione: Record<string, FormEntry>;
@@ -96,6 +104,9 @@ interface StatoIniziale {
   // differisce dal salvato → da persistere per allineare il DB al display.
   diffStandard: string[];
   diffFormazione: string[];
+  // Lavoratori (Sprint 14): esiti composite da upsertare e righe orfane da eliminare.
+  diffLavoratori: { compositeId: string; esito: EsitoRisposta }[];
+  deleteLavoratori: string[];
 }
 
 /**
@@ -110,7 +121,8 @@ function costruisciStatoIniziale(
   template: TemplateSnapshot,
   risposteIniziali: RispostaSalvata[],
   dataVisita: string,
-  chiusa: boolean
+  chiusa: boolean,
+  lavoratori: Lavoratore[]
 ): StatoIniziale {
   const risposte: Record<string, Entry> = {};
   for (const sez of template.sezioni) {
@@ -140,6 +152,9 @@ function costruisciStatoIniziale(
   const formazione: Record<string, FormEntry> = {};
   for (const r of risposteIniziali) {
     if (r.sezione_id !== "SEZ-03" || !r.domanda_id.includes(SEP_FORMAZIONE)) continue;
+    // Le righe composite dei lavoratori (D-03-001::<lavId>) NON sono formazione
+    // per-figura: gestite a parte (badge read-only derivato da SEZ-01).
+    if (r.domanda_id.startsWith(PREFISSO_LAV)) continue;
     formazione[r.domanda_id] = {
       esito: r.valore,
       azione: r.azione_correttiva ?? "",
@@ -150,6 +165,8 @@ function costruisciStatoIniziale(
 
   const diffStandard: string[] = [];
   const diffFormazione: string[] = [];
+  const diffLavoratori: { compositeId: string; esito: EsitoRisposta }[] = [];
+  let deleteLavoratori: string[] = [];
   if (!chiusa) {
     const diffs = ricalcolaEsitiAutomatici(
       template,
@@ -158,9 +175,15 @@ function costruisciStatoIniziale(
         valore: r.valore,
         dataVerifica: dataVerificaDa(r.campo_extra) || null,
       })),
-      dataVisita
+      dataVisita,
+      lavoratori
     );
     for (const d of diffs) {
+      // Lavoratori (Sprint 14): esito puro C/PC/NC, nessun prefill azione.
+      if (d.base.formazione_lavoratori) {
+        if (d.nuovoValore) diffLavoratori.push({ compositeId: d.domandaId, esito: d.nuovoValore });
+        continue;
+      }
       const prefill =
         (d.nuovoValore === "NC" || d.nuovoValore === "PC") &&
         Boolean(d.base.correzione_default?.trim());
@@ -178,9 +201,25 @@ function costruisciStatoIniziale(
         diffStandard.push(d.domandaId);
       }
     }
+    // Righe composite lavoratori orfane (lavoratore rimosso o senza data) → elimina.
+    const desiderati = new Set(
+      lavoratori
+        .filter((l) => l.dataFormazione)
+        .map((l) => idRispostaFormazione("D-03-001", l.id))
+    );
+    deleteLavoratori = risposteIniziali
+      .filter((r) => r.domanda_id.startsWith(PREFISSO_LAV) && !desiderati.has(r.domanda_id))
+      .map((r) => r.domanda_id);
   }
 
-  return { risposte, formazione, diffStandard, diffFormazione };
+  return {
+    risposte,
+    formazione,
+    diffStandard,
+    diffFormazione,
+    diffLavoratori,
+    deleteLavoratori,
+  };
 }
 
 export default function ChecklistClient({
@@ -199,6 +238,7 @@ export default function ChecklistClient({
   template,
   risposteIniziali,
   nominativiIniziali,
+  lavoratoriIniziali,
   impreseIniziali,
   risposteImpreseIniziali,
 }: Props) {
@@ -209,8 +249,12 @@ export default function ChecklistClient({
 
   // Stato iniziale con ricalcolo esiti automatici (una sola volta, Sprint 12.4).
   const [statoIniziale] = useState<StatoIniziale>(() =>
-    costruisciStatoIniziale(template, risposteIniziali, dataVisita, chiusa)
+    costruisciStatoIniziale(template, risposteIniziali, dataVisita, chiusa, lavoratoriIniziali)
   );
+
+  // Nodo D-03-001 (formazione lavoratori) nello snapshot, se presente (v9+).
+  const nodoLavoratori =
+    sezioni.flatMap((s) => s.domande).find((d) => d.formazione_lavoratori) ?? null;
 
   const [risposte, setRisposte] = useState<Record<string, Entry>>(statoIniziale.risposte);
 
@@ -219,6 +263,10 @@ export default function ChecklistClient({
 
   const [nominativi, setNominativi] =
     useState<NominativiStrutturati>(nominativiIniziali);
+
+  // Elenco lavoratori (SEZ-01, Sprint 14). Fonte della data formazione per il
+  // calcolo automatico C/PC/NC per-lavoratore di D-03-001 (SEZ-03).
+  const [lavoratori, setLavoratori] = useState<Lavoratore[]>(lavoratoriIniziali);
 
   // SEZ-03 formazione per-nominativo (Sprint 12): risposte indicizzate per
   // domanda_id composito "<D-03-00x>::<nominativoId>". Esiti automatici già
@@ -288,8 +336,14 @@ export default function ChecklistClient({
   useEffect(() => {
     if (chiusa || ricalcoloPersistito.current) return;
     ricalcoloPersistito.current = true;
-    const { diffStandard, diffFormazione } = statoIniziale;
-    if (diffStandard.length === 0 && diffFormazione.length === 0) return;
+    const { diffStandard, diffFormazione, diffLavoratori, deleteLavoratori } = statoIniziale;
+    if (
+      diffStandard.length === 0 &&
+      diffFormazione.length === 0 &&
+      diffLavoratori.length === 0 &&
+      deleteLavoratori.length === 0
+    )
+      return;
     void (async () => {
       for (const id of diffStandard) {
         await performSave(id, statoIniziale.risposte[id]);
@@ -306,6 +360,22 @@ export default function ChecklistClient({
         });
         setSalvataggio(res.ok ? "saved" : "error");
         if (!res.ok) setErroreMsg(res.error);
+      }
+      // Lavoratori (Sprint 14): upsert esiti ricalcolati + elimina righe orfane.
+      for (const { compositeId, esito } of diffLavoratori) {
+        const res = await salvaRispostaFormazioneAction({
+          visitaId,
+          domandaId: compositeId,
+          valore: esito,
+          azioneCorrettiva: null,
+          osservazioni: null,
+          dataVerifica: null,
+        });
+        setSalvataggio(res.ok ? "saved" : "error");
+        if (!res.ok) setErroreMsg(res.error);
+      }
+      for (const cid of deleteLavoratori) {
+        await eliminaRispostaFormazioneAction(visitaId, cid);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -430,6 +500,63 @@ export default function ChecklistClient({
     setNominativi(next);
     pianifica(KEY_NOMINATIVI, async () => {
       const res = await salvaNominativiAction(visitaId, next);
+      setSalvataggio(res.ok ? "saved" : "error");
+      if (!res.ok) setErroreMsg(res.error);
+    });
+  }
+
+  /** Esito automatico di un lavoratore dalla sua data formazione (o null). */
+  function esitoLavoratore(l: Lavoratore): EsitoRisposta | null {
+    if (!nodoLavoratori || !l.dataFormazione) return null;
+    return (
+      calcolaEsitoAuto(
+        l.dataFormazione,
+        nodoLavoratori.periodicita_mesi ?? null,
+        dataVisita,
+        nodoLavoratori.soglia_pc_giorni ?? 60
+      )?.esito ?? null
+    );
+  }
+
+  /**
+   * Autosave dell'elenco lavoratori (SEZ-01) + riconciliazione delle righe
+   * esito composite `D-03-001::<lavId>` (Sprint 14): upsert quando l'esito
+   * calcolato cambia (nuovo lavoratore o data modificata), elimina quando il
+   * lavoratore è rimosso o resta senza data. Nessun override manuale.
+   */
+  function handleLavoratori(next: Lavoratore[]) {
+    if (nodoLavoratori) {
+      const prevById = new Map(lavoratori.map((l) => [l.id, l]));
+      const nextIds = new Set(next.map((l) => l.id));
+      for (const l of next) {
+        const cid = idRispostaFormazione("D-03-001", l.id);
+        const nuovo = esitoLavoratore(l);
+        const prev = prevById.get(l.id);
+        const vecchio = prev ? esitoLavoratore(prev) : undefined;
+        if (nuovo && nuovo !== vecchio) {
+          void salvaRispostaFormazioneAction({
+            visitaId,
+            domandaId: cid,
+            valore: nuovo,
+            azioneCorrettiva: null,
+            osservazioni: null,
+            dataVerifica: null,
+          });
+        } else if (!nuovo && vecchio) {
+          void eliminaRispostaFormazioneAction(visitaId, cid); // data rimossa
+        }
+      }
+      // Lavoratori rimossi → elimina la riga esito.
+      for (const l of lavoratori) {
+        if (!nextIds.has(l.id)) {
+          void eliminaRispostaFormazioneAction(visitaId, idRispostaFormazione("D-03-001", l.id));
+        }
+      }
+    }
+
+    setLavoratori(next);
+    pianifica(KEY_LAVORATORI, async () => {
+      const res = await salvaLavoratoriAction(visitaId, next);
       setSalvataggio(res.ok ? "saved" : "error");
       if (!res.ok) setErroreMsg(res.error);
     });
@@ -720,6 +847,17 @@ export default function ChecklistClient({
             />
           )}
 
+          {/* Elenco lavoratori (SEZ-01, Sprint 14): dopo i nominativi figure
+              sicurezza. Solo su snapshot v9+ (D-03-001 per-lavoratore); le visite
+              legacy mantengono D-03-001 come domanda generica. */}
+          {isSezNominativi && nodoLavoratori && (
+            <LavoratoriSection
+              lavoratori={lavoratori}
+              disabled={chiusa}
+              onChange={handleLavoratori}
+            />
+          )}
+
           {[...sezione.domande]
             .sort((a, b) => a.ordine - b.ordine)
             // Logica condizionale di sezione: se la sezione è collassata
@@ -820,6 +958,16 @@ export default function ChecklistClient({
               dataSopralluogo={dataVisita}
               disabled={chiusa}
               onChange={handleFormazione}
+            />
+          )}
+
+          {/* Formazione lavoratori (Sprint 14): badge read-only C/PC/NC per
+              lavoratore di SEZ-01, calcolato dalla data formazione. */}
+          {isFormazione && nodoLavoratori && (
+            <LavoratoriFormazione
+              domanda={nodoLavoratori}
+              lavoratori={lavoratori}
+              dataSopralluogo={dataVisita}
             />
           )}
         </div>

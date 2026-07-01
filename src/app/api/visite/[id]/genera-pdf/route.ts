@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getVisitaById } from "@/lib/db/queries/visite";
-import { getRisposteByVisita, estraiNominativi } from "@/lib/db/queries/risposte";
+import {
+  getRisposteByVisita,
+  estraiNominativi,
+  estraiLavoratori,
+} from "@/lib/db/queries/risposte";
 import {
   getImpreseByVisita,
   getRisposteImpreseByVisita,
@@ -69,22 +73,47 @@ export async function POST(
     r.campo_extra && typeof r.campo_extra === "object"
       ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? null
       : null;
+  // Sprint 14: per la formazione lavoratori (D-03-001) la data è nell'anagrafica
+  // del lavoratore in SEZ-01 — passata al ricalcolo.
+  const lavoratori = estraiLavoratori(risposte);
   const diffs = ricalcolaEsitiAutomatici(
     visita.template_snapshot,
     risposte.map((r) => ({ domandaId: r.domanda_id, valore: r.valore, dataVerifica: dataVerificaDi(r) })),
-    visita.data_visita
+    visita.data_visita,
+    lavoratori
   );
   for (const d of diffs) {
-    const { error: upd } = await supabase
-      .from("risposte")
-      .update({ valore: d.nuovoValore, aggiornata_il: new Date().toISOString() })
-      .eq("visita_id", visita.id)
-      .eq("domanda_id", d.domandaId);
-    if (upd) {
-      return NextResponse.json(
-        { error: `Ricalcolo scadenza fallito: ${upd.message}` },
-        { status: 500 }
+    if (d.base.formazione_lavoratori) {
+      // Riga composita lavoratore (D-03-001::<lavId>): upsert (può non esistere
+      // ancora), sezione SEZ-03. Nessun campo testo (esito puro calcolato).
+      const { error: ins } = await supabase.from("risposte").upsert(
+        {
+          visita_id: visita.id,
+          domanda_id: d.domandaId,
+          sezione_id: "SEZ-03",
+          valore: d.nuovoValore,
+          aggiornata_il: new Date().toISOString(),
+        },
+        { onConflict: "visita_id,domanda_id" }
       );
+      if (ins) {
+        return NextResponse.json(
+          { error: `Ricalcolo formazione lavoratori fallito: ${ins.message}` },
+          { status: 500 }
+        );
+      }
+    } else {
+      const { error: upd } = await supabase
+        .from("risposte")
+        .update({ valore: d.nuovoValore, aggiornata_il: new Date().toISOString() })
+        .eq("visita_id", visita.id)
+        .eq("domanda_id", d.domandaId);
+      if (upd) {
+        return NextResponse.json(
+          { error: `Ricalcolo scadenza fallito: ${upd.message}` },
+          { status: 500 }
+        );
+      }
     }
     const rr = rispostaPer.get(d.domandaId); // stesso oggetto usato da validazione/PDF
     if (rr) rr.valore = d.nuovoValore;
@@ -213,6 +242,7 @@ export async function POST(
     referente_cliente: visita.referente_cliente,
     nominativi,
     template: visita.template_snapshot,
+    lavoratori,
     impreseAppalto: imprese,
     risposteImprese,
     risposte: Object.fromEntries(
