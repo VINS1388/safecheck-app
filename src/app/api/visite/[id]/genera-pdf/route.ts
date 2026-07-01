@@ -17,6 +17,7 @@ import {
   completezzaFormazione,
 } from "@/lib/checklist/completa";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
+import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,40 @@ export async function POST(
   //       (azione correttiva per NC/PC, motivazione per NV/NA)
   const risposte = await getRisposteByVisita(id);
   const rispostaPer = new Map(risposte.map((r) => [r.domanda_id, r]));
+
+  // 4-bis. SAFETY NET (Sprint 12.4): ricalcola gli esiti a calcolo automatico
+  //   contro la data del sopralluogo PRIMA di validare/congelare. Copre le
+  //   chiusure che non passano dalla checklist (es. bottone dal riepilogo), dove
+  //   il valore in `risposte.valore` potrebbe essere stale (bozza duplicata con
+  //   nuova data_visita). Stessa funzione del ricalcolo client, non duplicata.
+  //   NA/NV manuali non toccati; periodicità dallo snapshot immutabile. La
+  //   validazione completezza sotto opera sui valori aggiornati (un C→NC senza
+  //   azione correttiva viene quindi correttamente bloccato).
+  const dataVerificaDi = (r: (typeof risposte)[number]) =>
+    r.campo_extra && typeof r.campo_extra === "object"
+      ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? null
+      : null;
+  const diffs = ricalcolaEsitiAutomatici(
+    visita.template_snapshot,
+    risposte.map((r) => ({ domandaId: r.domanda_id, valore: r.valore, dataVerifica: dataVerificaDi(r) })),
+    visita.data_visita
+  );
+  for (const d of diffs) {
+    const { error: upd } = await supabase
+      .from("risposte")
+      .update({ valore: d.nuovoValore, aggiornata_il: new Date().toISOString() })
+      .eq("visita_id", visita.id)
+      .eq("domanda_id", d.domandaId);
+    if (upd) {
+      return NextResponse.json(
+        { error: `Ricalcolo scadenza fallito: ${upd.message}` },
+        { status: 500 }
+      );
+    }
+    const rr = rispostaPer.get(d.domandaId); // stesso oggetto usato da validazione/PDF
+    if (rr) rr.valore = d.nuovoValore;
+  }
+
   const nominativi = estraiNominativi(risposte); // strutturati (Sprint 12)
   // SEZ-08 multi-impresa: imprese + risposte per impresa (vuote per legacy v1).
   const imprese = await getImpreseByVisita(id);

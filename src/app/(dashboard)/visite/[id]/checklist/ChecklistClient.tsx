@@ -26,6 +26,8 @@ import {
   genericheFormazione,
   dlCoincideRspp,
 } from "@/lib/checklist/formazione";
+import { calcolaEsitoAuto, etichettaAuto } from "@/lib/scadenze/autocalcolo";
+import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
 import {
   salvaRispostaAction,
   salvaNominativiAction,
@@ -80,6 +82,107 @@ interface Props {
 const DEBOUNCE_MS = 800;
 const KEY_NOMINATIVI = "__nominativi__";
 
+/** data_verifica da campo_extra (stringa vuota se assente). */
+function dataVerificaDa(campoExtra: unknown): string {
+  return campoExtra && typeof campoExtra === "object"
+    ? (campoExtra as { data_verifica?: string }).data_verifica ?? ""
+    : "";
+}
+
+interface StatoIniziale {
+  risposte: Record<string, Entry>;
+  formazione: Record<string, FormEntry>;
+  // Id (standard e compositi formazione) il cui esito ricalcolato al mount
+  // differisce dal salvato → da persistere per allineare il DB al display.
+  diffStandard: string[];
+  diffFormazione: string[];
+}
+
+/**
+ * Stato iniziale della checklist, applicando il ricalcolo degli esiti a calcolo
+ * automatico contro `dataVisita` (Sprint 12.4) quando la visita è in BOZZA.
+ * Il valore salvato in `risposte.valore` per queste domande NON è fonte di
+ * verità finché la visita è bozza: può essere stale (es. bozza duplicata con
+ * nuova data_visita) e va sempre ricalcolato contro la data del sopralluogo
+ * corrente. In verbale chiuso i valori sono immutabili → nessun ricalcolo.
+ */
+function costruisciStatoIniziale(
+  template: TemplateSnapshot,
+  risposteIniziali: RispostaSalvata[],
+  dataVisita: string,
+  chiusa: boolean
+): StatoIniziale {
+  const risposte: Record<string, Entry> = {};
+  for (const sez of template.sezioni) {
+    for (const d of sez.domande) {
+      risposte[d.id] = {
+        valore: null,
+        azione: "",
+        osservazioneEvidenza: "",
+        osservazioni: "",
+        dataVerifica: "",
+        sezioneId: sez.id,
+      };
+    }
+  }
+  for (const r of risposteIniziali) {
+    if (!risposte[r.domanda_id]) continue; // ignora la riga sintetica nominativi
+    risposte[r.domanda_id] = {
+      valore: r.valore,
+      azione: r.azione_correttiva ?? "",
+      osservazioneEvidenza: r.osservazione_evidenza ?? "",
+      osservazioni: r.osservazioni ?? "",
+      dataVerifica: dataVerificaDa(r.campo_extra),
+      sezioneId: r.sezione_id,
+    };
+  }
+
+  const formazione: Record<string, FormEntry> = {};
+  for (const r of risposteIniziali) {
+    if (r.sezione_id !== "SEZ-03" || !r.domanda_id.includes(SEP_FORMAZIONE)) continue;
+    formazione[r.domanda_id] = {
+      esito: r.valore,
+      azione: r.azione_correttiva ?? "",
+      osservazione: r.osservazioni ?? "",
+      dataVerifica: dataVerificaDa(r.campo_extra),
+    };
+  }
+
+  const diffStandard: string[] = [];
+  const diffFormazione: string[] = [];
+  if (!chiusa) {
+    const diffs = ricalcolaEsitiAutomatici(
+      template,
+      risposteIniziali.map((r) => ({
+        domandaId: r.domanda_id,
+        valore: r.valore,
+        dataVerifica: dataVerificaDa(r.campo_extra) || null,
+      })),
+      dataVisita
+    );
+    for (const d of diffs) {
+      const prefill =
+        (d.nuovoValore === "NC" || d.nuovoValore === "PC") &&
+        Boolean(d.base.correzione_default?.trim());
+      if (d.domandaId.includes(SEP_FORMAZIONE)) {
+        const e = formazione[d.domandaId];
+        if (!e) continue;
+        e.esito = d.nuovoValore;
+        if (prefill && !e.azione.trim()) e.azione = d.base.correzione_default!;
+        diffFormazione.push(d.domandaId);
+      } else {
+        const e = risposte[d.domandaId];
+        if (!e) continue;
+        e.valore = d.nuovoValore;
+        if (prefill && !e.azione.trim()) e.azione = d.base.correzione_default!;
+        diffStandard.push(d.domandaId);
+      }
+    }
+  }
+
+  return { risposte, formazione, diffStandard, diffFormazione };
+}
+
 export default function ChecklistClient({
   visitaId,
   clienteNome,
@@ -104,37 +207,12 @@ export default function ChecklistClient({
   // Sezione formazione per-nominativo (SEZ-03), se presente nello snapshot.
   const sezFormazione = sezioni.find((s) => s.formazione_per_nominativo) ?? null;
 
-  const [risposte, setRisposte] = useState<Record<string, Entry>>(() => {
-    const map: Record<string, Entry> = {};
-    for (const sez of sezioni) {
-      for (const d of sez.domande) {
-        map[d.id] = {
-          valore: null,
-          azione: "",
-          osservazioneEvidenza: "",
-          osservazioni: "",
-          dataVerifica: "",
-          sezioneId: sez.id,
-        };
-      }
-    }
-    for (const r of risposteIniziali) {
-      if (!map[r.domanda_id]) continue; // ignora la riga sintetica nominativi
-      const dv =
-        r.campo_extra && typeof r.campo_extra === "object"
-          ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? ""
-          : "";
-      map[r.domanda_id] = {
-        valore: r.valore,
-        azione: r.azione_correttiva ?? "",
-        osservazioneEvidenza: r.osservazione_evidenza ?? "",
-        osservazioni: r.osservazioni ?? "",
-        dataVerifica: dv,
-        sezioneId: r.sezione_id,
-      };
-    }
-    return map;
-  });
+  // Stato iniziale con ricalcolo esiti automatici (una sola volta, Sprint 12.4).
+  const [statoIniziale] = useState<StatoIniziale>(() =>
+    costruisciStatoIniziale(template, risposteIniziali, dataVisita, chiusa)
+  );
+
+  const [risposte, setRisposte] = useState<Record<string, Entry>>(statoIniziale.risposte);
 
   // Lookup domanda per id (per sapere se ha campo data, gate, ecc.).
   const domandeById = new Map(sezioni.flatMap((s) => s.domande.map((d) => [d.id, d] as const)));
@@ -143,26 +221,11 @@ export default function ChecklistClient({
     useState<NominativiStrutturati>(nominativiIniziali);
 
   // SEZ-03 formazione per-nominativo (Sprint 12): risposte indicizzate per
-  // domanda_id composito "<D-03-00x>::<nominativoId>".
+  // domanda_id composito "<D-03-00x>::<nominativoId>". Esiti automatici già
+  // ricalcolati al mount (Sprint 12.4).
   const [risposteFormazione, setRisposteFormazione] = useState<
     Record<string, FormEntry>
-  >(() => {
-    const map: Record<string, FormEntry> = {};
-    for (const r of risposteIniziali) {
-      if (r.sezione_id !== "SEZ-03" || !r.domanda_id.includes(SEP_FORMAZIONE)) continue;
-      const dv =
-        r.campo_extra && typeof r.campo_extra === "object"
-          ? (r.campo_extra as { data_verifica?: string }).data_verifica ?? ""
-          : "";
-      map[r.domanda_id] = {
-        esito: r.valore,
-        azione: r.azione_correttiva ?? "",
-        osservazione: r.osservazioni ?? "",
-        dataVerifica: dv,
-      };
-    }
-    return map;
-  });
+  >(statoIniziale.formazione);
 
   // SEZ-08 multi-impresa (Sprint 9.1): elenco imprese + risposte per impresa.
   const [imprese, setImprese] = useState<ImpresaAppalto[]>(impreseIniziali);
@@ -218,6 +281,36 @@ export default function ChecklistClient({
     if (!res.ok) setErroreMsg(res.error);
   }
 
+  // Persiste al mount i valori ricalcolati (bozza) diversi dal salvato, così il
+  // DB — fonte di verità per chiusura/PDF — resta allineato al display corretto.
+  // Riusa l'autosave esistente; nessuna scrittura se nulla è cambiato.
+  const ricalcoloPersistito = useRef(false);
+  useEffect(() => {
+    if (chiusa || ricalcoloPersistito.current) return;
+    ricalcoloPersistito.current = true;
+    const { diffStandard, diffFormazione } = statoIniziale;
+    if (diffStandard.length === 0 && diffFormazione.length === 0) return;
+    void (async () => {
+      for (const id of diffStandard) {
+        await performSave(id, statoIniziale.risposte[id]);
+      }
+      for (const cid of diffFormazione) {
+        const e = statoIniziale.formazione[cid];
+        const res = await salvaRispostaFormazioneAction({
+          visitaId,
+          domandaId: cid,
+          valore: e.esito,
+          azioneCorrettiva: e.azione.trim() ? e.azione : null,
+          osservazioni: e.osservazione.trim() ? e.osservazione : null,
+          dataVerifica: e.dataVerifica.trim() ? e.dataVerifica : null,
+        });
+        setSalvataggio(res.ok ? "saved" : "error");
+        if (!res.ok) setErroreMsg(res.error);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function aggiorna(domandaId: string, sezioneId: string, patch: Partial<Entry>) {
     const corrente = risposte[domandaId] ?? {
       valore: null,
@@ -230,6 +323,41 @@ export default function ChecklistClient({
     const entry: Entry = { ...corrente, ...patch, sezioneId };
     setRisposte((prev) => ({ ...prev, [domandaId]: entry }));
     pianifica(domandaId, () => performSave(domandaId, entry));
+  }
+
+  // ── Calcolo automatico esito da scadenza (Sprint 12.4) ───────────────────
+  // Per le domande `calcolo_automatico` rese come DomandaCard diretta (D-03-005
+  // DL-SPP non fuso, riunione periodica D-01-008, sopralluogo MC D-01-016): al
+  // cambio data l'esito C/PC/NC è ricalcolato dalla DATA DEL SOPRALLUOGO; NA/NV
+  // manuali non vengono mai sovrascritti.
+  function onDataCalcolo(d: { id: string; periodicita_mesi?: number; soglia_pc_giorni?: number; correzione_default?: string }, sezioneId: string, nuovaData: string) {
+    const corrente = risposte[d.id];
+    const patch: Partial<Entry> = { dataVerifica: nuovaData };
+    const manuale = corrente?.valore === "NA" || corrente?.valore === "NV";
+    if (!manuale) {
+      const auto = nuovaData
+        ? calcolaEsitoAuto(nuovaData, d.periodicita_mesi ?? null, dataVisita, d.soglia_pc_giorni ?? 60)
+        : null;
+      patch.valore = auto ? auto.esito : null;
+      if (
+        auto &&
+        (auto.esito === "NC" || auto.esito === "PC") &&
+        !(corrente?.azione ?? "").trim() &&
+        d.correzione_default?.trim()
+      ) {
+        patch.azione = d.correzione_default;
+      }
+    }
+    aggiorna(d.id, sezioneId, patch);
+  }
+
+  /** Deselezione NA/NV su domanda a calcolo: torna all'esito derivato dalla data. */
+  function deselezionaCalcolo(d: { id: string; periodicita_mesi?: number; soglia_pc_giorni?: number }, sezioneId: string) {
+    const corrente = risposte[d.id];
+    const auto = corrente?.dataVerifica
+      ? calcolaEsitoAuto(corrente.dataVerifica, d.periodicita_mesi ?? null, dataVisita, d.soglia_pc_giorni ?? 60)
+      : null;
+    aggiorna(d.id, sezioneId, { valore: auto ? auto.esito : null });
   }
 
   /** Composite id attivi (istanze formazione) per uno stato nominativi. */
@@ -610,6 +738,7 @@ export default function ChecklistClient({
             )
             .map((d) => {
               const entry = risposte[d.id];
+              const isAuto = d.calcolo_automatico === true;
               return (
                 <DomandaCard
                   key={d.id}
@@ -620,7 +749,24 @@ export default function ChecklistClient({
                   osservazioni={entry?.osservazioni ?? ""}
                   mostraDataVerifica={d.campo_data === true}
                   dataVerifica={entry?.dataVerifica ?? ""}
-                  onDataVerifica={(t) => aggiorna(d.id, sezione.id, { dataVerifica: t })}
+                  onDataVerifica={(t) =>
+                    isAuto
+                      ? onDataCalcolo(d, sezione.id, t)
+                      : aggiorna(d.id, sezione.id, { dataVerifica: t })
+                  }
+                  calcoloAutomatico={isAuto}
+                  calcoloEtichetta={
+                    isAuto
+                      ? etichettaAuto(
+                          entry?.valore ?? null,
+                          entry?.dataVerifica ?? "",
+                          d.periodicita_mesi ?? null,
+                          dataVisita,
+                          d.soglia_pc_giorni ?? 60
+                        )
+                      : undefined
+                  }
+                  onDeselezionaEsito={isAuto ? () => deselezionaCalcolo(d, sezione.id) : undefined}
                   disabled={chiusa}
                   onValore={(v) => {
                     const corrente = risposte[d.id];
@@ -671,6 +817,7 @@ export default function ChecklistClient({
             <FormazioneNominativi
               istanze={istanzeCorrente}
               risposte={risposteFormazione}
+              dataSopralluogo={dataVisita}
               disabled={chiusa}
               onChange={handleFormazione}
             />

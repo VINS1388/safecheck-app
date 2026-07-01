@@ -1,0 +1,69 @@
+// Ricalcolo batch degli esiti a calcolo automatico (Sprint 12.4).
+// Fonte di verità unica del ricalcolo, riusata da:
+//   - client, al mount della checklist in bozza (allinea display + persiste diff);
+//   - server, nella chiusura verbale (genera-pdf), come safety net obbligatorio
+//     per i percorsi che chiudono senza montare la checklist.
+// Legge periodicità/soglia dallo SNAPSHOT del template (immutabile per visita),
+// mai dal template_master live. NA/NV sono manuali e non vengono mai toccati.
+
+import type { DomandaTemplate, TemplateSnapshot } from "@/types";
+import { SEP_FORMAZIONE } from "@/types";
+import { valutaConformitaDaScadenza } from "@/lib/scadenze/calcola";
+
+export interface RispostaCalcolo {
+  domandaId: string; // può essere composito "<base>::<nominativoId>" (formazione)
+  valore: string | null;
+  dataVerifica: string | null; // da campo_extra.data_verifica
+}
+
+export interface RicalcoloDiff {
+  domandaId: string;
+  base: DomandaTemplate; // domanda base del template (con periodicita/correzione_default)
+  vecchioValore: string | null;
+  nuovoValore: "C" | "PC" | "NC" | null;
+}
+
+/** Indice base domanda_id → nodo domanda dello snapshot (con i flag calcolo). */
+function indiceDomande(snapshot: TemplateSnapshot): Map<string, DomandaTemplate> {
+  const m = new Map<string, DomandaTemplate>();
+  for (const s of snapshot.sezioni) for (const d of s.domande) m.set(d.id, d);
+  return m;
+}
+
+/** Id base di una risposta (rimuove il suffisso composito della formazione). */
+export function domandaBaseId(domandaId: string): string {
+  const i = domandaId.indexOf(SEP_FORMAZIONE);
+  return i < 0 ? domandaId : domandaId.slice(0, i);
+}
+
+/**
+ * Ricalcola l'esito delle risposte a domande `calcolo_automatico` contro
+ * `dataVisita` (data sopralluogo). Ritorna SOLO le risposte da aggiornare
+ * (nuovoValore ≠ vecchioValore). Esclude NA/NV (manuali). Riusa
+ * `valutaConformitaDaScadenza` — nessuna duplicazione della logica di soglia.
+ */
+export function ricalcolaEsitiAutomatici(
+  snapshot: TemplateSnapshot,
+  risposte: RispostaCalcolo[],
+  dataVisita: string
+): RicalcoloDiff[] {
+  const idx = indiceDomande(snapshot);
+  const out: RicalcoloDiff[] = [];
+  for (const r of risposte) {
+    if (r.valore === "NA" || r.valore === "NV") continue; // scelta manuale
+    const base = idx.get(domandaBaseId(r.domandaId));
+    if (!base?.calcolo_automatico) continue;
+    const nuovo = r.dataVerifica
+      ? valutaConformitaDaScadenza(
+          r.dataVerifica,
+          base.periodicita_mesi ?? null,
+          dataVisita,
+          base.soglia_pc_giorni ?? 60
+        )
+      : null;
+    if (nuovo !== r.valore) {
+      out.push({ domandaId: r.domandaId, base, vecchioValore: r.valore, nuovoValore: nuovo });
+    }
+  }
+  return out;
+}

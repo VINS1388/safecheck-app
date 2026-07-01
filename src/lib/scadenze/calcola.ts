@@ -64,6 +64,52 @@ export function isScaduta(dataScadenza: string, oggi: string): boolean {
   return dataScadenza < oggi; // confronto lessicografico valido su ISO yyyy-mm-dd
 }
 
+// ── Valutazione conformità da scadenza (Sprint 12.4) ───────────────────────
+//
+// Collega il campo data attestato/verifica (SEZ-03 per-nominativo, D-03-005,
+// riunione periodica D-01-008, sopralluogo MC D-01-016) al motore scadenze:
+// da (data attestato, periodicità normativa) si ricava la scadenza, poi il
+// confronto con la DATA DEL SOPRALLUOGO — mai la data di sistema — determina
+// l'esito. NA/NV NON sono mai calcolati: restano scelta manuale del tecnico.
+
+/** Esito derivabile da una scadenza (mai NA/NV, che restano manuali). */
+export type EsitoConformita = "C" | "PC" | "NC";
+
+/**
+ * Giorni interi tra due date ISO yyyy-mm-dd (`dataA - dataB`). Calcolo in UTC
+ * per evitare gli scostamenti di fuso di `Date` locale (coerente con il resto
+ * del modulo, string-based).
+ */
+export function differenzaGiorni(dataA: string, dataB: string): number {
+  const [ya, ma, da] = dataA.split("-").map(Number);
+  const [yb, mb, db] = dataB.split("-").map(Number);
+  return Math.round((Date.UTC(ya, ma - 1, da) - Date.UTC(yb, mb - 1, db)) / 86_400_000);
+}
+
+/**
+ * Valuta la conformità C/PC/NC di un attestato rispetto alla data del
+ * sopralluogo, data la periodicità normativa (mesi):
+ *   - scaduto (giorni alla scadenza < 0)         → NC
+ *   - in scadenza (0 .. sogliaPcGiorni giorni)   → PC
+ *   - valido oltre la soglia                     → C
+ * Riusa `calcolaScadenza` (nessuna duplicazione della logica data); solo la
+ * valutazione di soglia è nuova. Ritorna null se manca la data attestato o la
+ * periodicità (niente da calcolare → l'esito resta a scelta del tecnico).
+ */
+export function valutaConformitaDaScadenza(
+  dataAttestato: string | null | undefined,
+  periodicitaMesi: number | null | undefined,
+  dataSopralluogo: string,
+  sogliaPcGiorni = 60
+): EsitoConformita | null {
+  const scadenza = calcolaScadenza(dataAttestato, periodicitaMesi);
+  if (!scadenza) return null;
+  const giorniAllaScadenza = differenzaGiorni(scadenza, dataSopralluogo);
+  if (giorniAllaScadenza < 0) return "NC";
+  if (giorniAllaScadenza <= sogliaPcGiorni) return "PC";
+  return "C";
+}
+
 export interface FiltroScadenze {
   stato?: StatoScadenza;
   clienteId?: string;

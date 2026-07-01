@@ -2,6 +2,7 @@
 
 import type { DomandaTemplate, EsitoRisposta } from "@/types";
 import type { IstanzaFormazione } from "@/lib/checklist/formazione";
+import { calcolaEsitoAuto, etichettaAuto } from "@/lib/scadenze/autocalcolo";
 import DomandaCard from "./DomandaCard";
 
 /** Stato locale di una risposta di formazione per-nominativo. */
@@ -24,6 +25,8 @@ interface Props {
   istanze: IstanzaFormazione[];
   // risposte[compositeDomandaId] -> FormEntry
   risposte: Record<string, FormEntry>;
+  // Data del sopralluogo (ISO): riferimento del calcolo automatico esito (Sprint 12.4).
+  dataSopralluogo: string;
   disabled: boolean;
   onChange: (compositeId: string, patch: Partial<FormEntry>) => void;
 }
@@ -31,6 +34,7 @@ interface Props {
 export default function FormazioneNominativi({
   istanze,
   risposte,
+  dataSopralluogo,
   disabled,
   onChange,
 }: Props) {
@@ -72,6 +76,30 @@ export default function FormazioneNominativi({
                 campo_extra: undefined,
                 figura_nominativo: undefined,
               };
+              // Calcolo automatico esito (Sprint 12.4): letto per-domanda dal
+              // template snapshot (undefined sugli snapshot ≤ v7 → comportamento
+              // manuale invariato).
+              const isAuto = ist.domandaBase.calcolo_automatico === true;
+              const periodicita = ist.domandaBase.periodicita_mesi ?? null;
+              const soglia = ist.domandaBase.soglia_pc_giorni ?? 60;
+              // Ricalcola l'esito dalla data attestato, salvo esito NA/NV manuale.
+              const applicaData = (nuovaData: string): Partial<FormEntry> => {
+                const patch: Partial<FormEntry> = { dataVerifica: nuovaData };
+                if (!isAuto || e.esito === "NA" || e.esito === "NV") return patch;
+                const auto = nuovaData
+                  ? calcolaEsitoAuto(nuovaData, periodicita, dataSopralluogo, soglia)
+                  : null;
+                patch.esito = auto ? auto.esito : null;
+                if (
+                  auto &&
+                  (auto.esito === "NC" || auto.esito === "PC") &&
+                  !e.azione.trim() &&
+                  ist.domandaBase.correzione_default?.trim()
+                ) {
+                  patch.azione = ist.domandaBase.correzione_default;
+                }
+                return patch;
+              };
               return (
                 <DomandaCard
                   key={ist.compositeId}
@@ -84,7 +112,23 @@ export default function FormazioneNominativi({
                   mostraOsservazioneEvidenza={false}
                   mostraDataVerifica
                   dataVerifica={e.dataVerifica}
-                  onDataVerifica={(v) => onChange(ist.compositeId, { dataVerifica: v })}
+                  onDataVerifica={(v) => onChange(ist.compositeId, applicaData(v))}
+                  calcoloAutomatico={isAuto}
+                  calcoloEtichetta={
+                    isAuto
+                      ? etichettaAuto(e.esito, e.dataVerifica, periodicita, dataSopralluogo, soglia)
+                      : undefined
+                  }
+                  onDeselezionaEsito={
+                    isAuto
+                      ? () => {
+                          const auto = e.dataVerifica
+                            ? calcolaEsitoAuto(e.dataVerifica, periodicita, dataSopralluogo, soglia)
+                            : null;
+                          onChange(ist.compositeId, { esito: auto ? auto.esito : null });
+                        }
+                      : undefined
+                  }
                   onValore={(v) => {
                     const patch: Partial<FormEntry> = { esito: v };
                     if (

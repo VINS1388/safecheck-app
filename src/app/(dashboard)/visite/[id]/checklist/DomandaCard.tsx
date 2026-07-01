@@ -38,10 +38,16 @@ export interface DomandaCardProps {
   // Disattivato nel contesto impresa di SEZ-08 (nessuna colonna dedicata).
   mostraOsservazioneEvidenza?: boolean;
   // Campo data di verifica formazione (SEZ-03 per-nominativo, Sprint 12).
-  // Opzionale, non concorre alla completezza; nessun calcolo scadenze qui.
   mostraDataVerifica?: boolean;
   dataVerifica?: string;
   onDataVerifica?: (valore: string) => void;
+  // Calcolo automatico esito da scadenza (Sprint 12.4): se true, i bottoni
+  // C/PC/NC sono read-only (l'esito lo determina la data attestato); solo NA/NV
+  // restano cliccabili. `calcoloEtichetta` è la nota di trasparenza mostrata al
+  // tecnico; `onDeselezionaEsito` riporta al calcolo automatico deselezionando NA/NV.
+  calcoloAutomatico?: boolean;
+  calcoloEtichetta?: string;
+  onDeselezionaEsito?: () => void;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
   onOsservazioneEvidenza: (testo: string) => void;
@@ -59,6 +65,9 @@ export default function DomandaCard({
   mostraDataVerifica = false,
   dataVerifica = "",
   onDataVerifica,
+  calcoloAutomatico = false,
+  calcoloEtichetta,
+  onDeselezionaEsito,
   onValore,
   onAzione,
   onOsservazioneEvidenza,
@@ -107,17 +116,33 @@ export default function DomandaCard({
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {VALORI.map((v) => {
           const selezionato = valore === v;
+          // Calcolo automatico: C/PC/NC sono read-only (li determina la data);
+          // NA/NV restano manuali (con deselezione per tornare al calcolo).
+          const esitoReadOnly = calcoloAutomatico && (v === "C" || v === "PC" || v === "NC");
           return (
             <button
               key={v}
               type="button"
               disabled={disabled}
-              onClick={() => onValore(v)}
+              aria-disabled={esitoReadOnly || undefined}
+              onClick={() => {
+                if (disabled || esitoReadOnly) return;
+                if (calcoloAutomatico && selezionato && (v === "NA" || v === "NV")) {
+                  onDeselezionaEsito?.();
+                  return;
+                }
+                onValore(v);
+              }}
               className={cn(
                 "flex min-h-[48px] flex-col items-center justify-center rounded-lg border px-2 py-1.5 text-center font-semibold leading-tight transition disabled:opacity-50",
                 selezionato
                   ? STILE_SELEZIONATO[v]
-                  : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                  : "border-gray-300 bg-white text-gray-700",
+                // Hover solo sui bottoni realmente cliccabili.
+                !disabled && !esitoReadOnly && !selezionato && "hover:border-gray-400 hover:bg-gray-50",
+                // Read-only non selezionato: attenuato e non interattivo.
+                esitoReadOnly && !selezionato && "opacity-40",
+                esitoReadOnly && "cursor-default"
               )}
             >
               <span className="text-base font-bold">{v}</span>
@@ -134,13 +159,25 @@ export default function DomandaCard({
         })}
       </div>
 
+      {/* Nota di trasparenza del calcolo automatico (read-only): mostra l'esito
+          derivato dalla data e la scadenza, oppure invita a inserire la data. */}
+      {calcoloAutomatico && calcoloEtichetta && (
+        <p className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">
+          {calcoloEtichetta}
+        </p>
+      )}
+
       {/* Data di verifica/aggiornamento formazione (SEZ-03 per-nominativo).
           Opzionale, indipendente dall'esito; nessun calcolo di scadenza. */}
       {mostraDataVerifica && (
         <div className="mt-3">
           <label className="block text-xs font-medium text-gray-700">
-            Data ultima verifica/aggiornamento formazione{" "}
-            <span className="font-normal text-gray-400">(opzionale)</span>
+            {calcoloAutomatico
+              ? "Data attestato / ultima formazione"
+              : "Data ultima verifica/aggiornamento formazione"}{" "}
+            <span className="font-normal text-gray-400">
+              {calcoloAutomatico ? "(determina l'esito)" : "(opzionale)"}
+            </span>
           </label>
           <input
             type="date"

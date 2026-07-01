@@ -40,8 +40,15 @@ export interface DomandaTemplate {
   gated_by?: string;
   gate_collassa_su?: string[];
   // Mostra un campo data strutturato (es. data ultimo sopralluogo MC). Solo
-  // dato, persistito su risposte.campo_extra.data_verifica; nessun calcolo scadenze.
+  // dato, persistito su risposte.campo_extra.data_verifica.
   campo_data?: boolean;
+  // Calcolo automatico dell'esito da scadenza attestato (Sprint 12.4): se true,
+  // l'esito C/PC/NC è derivato dalla data attestato/verifica (campo_extra.data_verifica)
+  // confrontata con `periodicita_mesi` e la DATA DEL SOPRALLUOGO. NA/NV restano
+  // sempre scelta manuale del tecnico; il calcolo non li sovrascrive mai.
+  calcolo_automatico?: boolean;
+  periodicita_mesi?: number; // periodicità normativa in mesi (es. Preposti 24, RSPP 60, RLS 12)
+  soglia_pc_giorni?: number; // giorni entro la scadenza in cui l'esito è PC (default 60)
   campo_extra?: CampoExtraTemplate;
 }
 
