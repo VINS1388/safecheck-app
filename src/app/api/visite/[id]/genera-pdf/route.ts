@@ -315,6 +315,35 @@ export async function POST(
       throw new Error(`Chiusura visita fallita: ${updErr.message}`);
     }
 
+    // 11-bis. Aggancio automatico slot pianificato (Sprint 15): best-effort.
+    //   Cerca il primo slot libero della sede (per ciclo/numero) e lo marca
+    //   'eseguita' collegandolo al verbale appena chiuso. NON blocca né condiziona
+    //   la chiusura: try/catch DEDICATO — un errore qui non deve mai propagarsi al
+    //   catch esterno (che farebbe rollback della chiusura). Sede senza piano o
+    //   ciclo già completo → nessuno slot → nessuna azione, nessun errore.
+    try {
+      const { data: slot } = await admin
+        .from("visite_pianificate")
+        .select("id")
+        .eq("sede_id", visita.sede_id)
+        .in("stato", ["da_pianificare", "pianificata"])
+        .order("ciclo_numero", { ascending: true })
+        .order("numero_visita", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (slot) {
+        await admin
+          .from("visite_pianificate")
+          .update({ visita_id: visita.id, stato: "eseguita" })
+          .eq("id", slot.id);
+      }
+    } catch (aggErr) {
+      console.error(
+        "aggancio slot pianificato (non bloccante):",
+        aggErr instanceof Error ? aggErr.message : aggErr
+      );
+    }
+
     // 12. OK
     return NextResponse.json({
       success: true,

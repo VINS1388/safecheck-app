@@ -187,6 +187,47 @@ export interface Lavoratore {
 /** Id della "domanda" fittizia che archivia l'elenco lavoratori di SEZ-01. */
 export const DOMANDA_LAVORATORI = "SEZ-01-LAV";
 
+// ── Pianificazione visite (Sprint 15) ──────────────────────────────────────
+
+/** Stato di uno slot pianificato. */
+export type StatoSlot = "da_pianificare" | "pianificata" | "eseguita";
+
+export const ETICHETTE_STATO_SLOT: Record<StatoSlot, string> = {
+  da_pianificare: "Da pianificare",
+  pianificata: "Pianificata",
+  eseguita: "Eseguita",
+};
+
+/** Piano contrattuale di una sede (N visite/anno da una data di inizio ciclo). */
+export interface PianoVisite {
+  id: string;
+  sedeId: string;
+  dataInizioCiclo: string; // ISO yyyy-mm-dd
+  visiteAnno: number;
+  tecnicoAssegnatoId: string | null;
+  cicloCorrente: number;
+}
+
+/** Uno slot pianificato (visita prevista dal contratto). */
+export interface VisitaPianificata {
+  id: string;
+  pianoId: string;
+  sedeId: string;
+  numeroVisita: number;
+  cicloNumero: number;
+  dataSuggerita: string; // ISO yyyy-mm-dd
+  dataPianificata: string | null;
+  stato: StatoSlot;
+  visitaId: string | null;
+}
+
+/** Tecnico assegnabile (utente attivo). */
+export interface TecnicoOption {
+  id: string;
+  nomeCompleto: string;
+  ruolo: string;
+}
+
 /** Separatore per il domanda_id composito delle risposte formazione per-nominativo. */
 export const SEP_FORMAZIONE = "::";
 

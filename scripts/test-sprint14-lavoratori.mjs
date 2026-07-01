@@ -61,9 +61,13 @@ check("riferimento = data sopralluogo (B: C con sopralluogo 2024-01-01)",
   valutaConformitaDaScadenza("2021-08-01", 60, "2024-01-01") === "C");
 
 await c.connect();
+// Versione template PRIMA della transazione (prod). La 020 può essere già
+// applicata (v9) → il suo apply in transazione è no-op; il rollback deve
+// comunque riportare a questa versione, qualunque essa sia.
+const verPre = (await one(`SELECT versione FROM template_master WHERE attivo=true`)).versione;
 try {
   await c.query("BEGIN");
-  await c.query(readFileSync(SQL_020, "utf8")); // v8 → v9 (in transazione)
+  await c.query(readFileSync(SQL_020, "utf8")); // v8 → v9 (no-op se già v9)
   const snapshot = (await one(`SELECT struttura_json FROM template_master WHERE attivo=true`)).struttura_json;
   check("snapshot v9 con nodo formazione_lavoratori", snapshot.versione === 9);
   const nodo = snapshot.sezioni.flatMap((s) => s.domande).find((d) => d.formazione_lavoratori);
@@ -144,7 +148,7 @@ try {
 
   await c.query("ROLLBACK");
   const ver = (await one(`SELECT versione FROM template_master WHERE attivo=true`)).versione;
-  check("dopo ROLLBACK: versione torna a 8 (non persistito)", ver === 8);
+  check("dopo ROLLBACK: versione invariata rispetto a prima (non persistito)", ver === verPre, `pre=${verPre} post=${ver}`);
 } finally {
   await c.end();
 }

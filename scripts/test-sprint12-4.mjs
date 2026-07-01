@@ -183,15 +183,15 @@ try {
   const mc = await flag("D-01-016");
   check("D-01-016 Sopralluogo MC: periodicita 12 + campo_data preservato",
     mc.ca === "true" && mc.pm === "12" && mc.cd === "true");
-  // Fuori scope: D-03-001 (Formazione lavoratori) NON deve essere flaggata.
-  const lav = await flag("D-03-001");
-  check("D-03-001 Lavoratori: NON flaggata (fuori scope, Sprint 12.5)",
-    lav.ca == null && lav.pm == null);
+  // NB: D-03-001 (Formazione lavoratori) era "fuori scope" a Sprint 12.4, ma
+  // Sprint 14 (migration 020) l'ha flaggata legittimamente → asserzione rimossa.
 
   const { rows: v } = await c.query(
     `SELECT versione, struttura_json->>'versione' AS jv FROM template_master WHERE attivo = true`
   );
-  check("template versione 8 (int + json)", v[0].versione === 8 && v[0].jv === "8");
+  // La 019 porta almeno a v8; il template può essere avanzato (Sprint 14 → v9).
+  // Ciò che conta qui è che i flag della 019 siano presenti (verificato sopra).
+  check("template versione >= 8 (019 applicata)", Number(v[0].versione) >= 8 && Number(v[0].jv) >= 8);
 
   await c.query("ROLLBACK");
 } finally {

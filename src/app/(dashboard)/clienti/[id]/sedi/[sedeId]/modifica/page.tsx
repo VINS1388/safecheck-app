@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSedeById } from "@/lib/db/queries/sedi";
+import {
+  getPianoBySede,
+  getSlotByPianoCiclo,
+  getTecnici,
+} from "@/lib/db/queries/pianificazione";
 import SedeForm from "../../SedeForm";
 import { aggiornaSedeAction } from "../../actions";
+import PianoVisiteForm from "./PianoVisiteForm";
 
 export default async function ModificaSedePage({
   params,
@@ -15,6 +21,9 @@ export default async function ModificaSedePage({
   if (!sede || sede.cliente_id !== id) {
     notFound();
   }
+
+  const [piano, tecnici] = await Promise.all([getPianoBySede(sedeId), getTecnici()]);
+  const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
 
   return (
     <main className="mx-auto max-w-2xl">
@@ -30,6 +39,14 @@ export default async function ModificaSedePage({
         clienteId={id}
         sede={sede}
         submitLabel="Salva modifiche"
+      />
+
+      <PianoVisiteForm
+        clienteId={id}
+        sedeId={sedeId}
+        piano={piano}
+        tecnici={tecnici}
+        slots={slots}
       />
     </main>
   );

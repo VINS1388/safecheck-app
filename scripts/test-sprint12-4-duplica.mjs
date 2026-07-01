@@ -58,7 +58,8 @@ try {
   const snapshot = (await one(
     `SELECT struttura_json FROM template_master WHERE attivo = true LIMIT 1`
   )).struttura_json;
-  check("snapshot template versione 8", snapshot.versione === 8);
+  // Template avanzato oltre v8 (Sprint 14 → v9); i flag della 019 su D-03-002 restano.
+  check("snapshot template versione >= 8", Number(snapshot.versione) >= 8);
 
   const sede = await one(`SELECT id, cliente_id FROM sedi LIMIT 1`);
   const utente = await one(`SELECT id FROM utenti LIMIT 1`);
