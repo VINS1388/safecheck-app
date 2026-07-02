@@ -881,9 +881,17 @@ function renderFooters(doc: Doc, dati: VerbaleData): void {
     doc.page.margins.bottom = 0;
 
     const y = doc.page.height - 35;
+    // Riga sottile di separazione sopra il footer (una linea non innesca
+    // l'auto-impaginazione, a differenza del testo).
+    doc
+      .lineWidth(0.5)
+      .strokeColor("#e5e7eb")
+      .moveTo(MARGINE, y - 6)
+      .lineTo(doc.page.width - MARGINE, y - 6)
+      .stroke();
     doc.font("Helvetica").fontSize(8).fillColor(GRIGIO);
     doc.text(
-      `${dati.visita.numero_verbale}  ·  Generato il ${dataGen}`,
+      `SafeCheck  ·  ${dati.visita.numero_verbale}  ·  Generato il ${dataGen}`,
       MARGINE,
       y,
       { width: larghezzaContenuto(doc) / 2, lineBreak: false }

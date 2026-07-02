@@ -39,15 +39,26 @@ async function aggancia(sedeId, visitaId) {
 await c.connect();
 try {
   await c.query("BEGIN");
-  await c.query(readFileSync(join(ROOT, "supabase/migrations/021_sprint15_pianificazione.sql"), "utf8"));
+  // La 021 può essere già applicata in prod → in tal caso NON la riapplichiamo
+  // (CREATE TYPE/TABLE fallirebbero); usiamo lo schema esistente in transazione.
+  const giaApplicata = (await one(`SELECT to_regclass('public.piani_visite') t`)).t != null;
+  if (!giaApplicata) {
+    await c.query(readFileSync(join(ROOT, "supabase/migrations/021_sprint15_pianificazione.sql"), "utf8"));
+  }
 
-  const sede = await one(`SELECT id, cliente_id FROM sedi LIMIT 1`);
+  const base = await one(`SELECT cliente_id FROM sedi LIMIT 1`);
   const utente = await one(`SELECT id FROM utenti WHERE attivo=true LIMIT 1`);
-  // Seconda sede (stesso cliente) SENZA piano, per lo scenario "sede senza piano".
+  // Sedi di test FRESCHE nella transazione (evita collisioni con piani reali di
+  // prod: piani_visite.sede_id è UNIQUE). Tutto rolled back a fine test.
+  const sede = await one(
+    `INSERT INTO sedi (cliente_id, nome, indirizzo, citta, attiva, principale)
+     VALUES ($1,'Sede piano test','Via Test 1','Palermo',true,false) RETURNING id, cliente_id`,
+    [base.cliente_id]
+  );
   const sedeNoPiano = await one(
     `INSERT INTO sedi (cliente_id, nome, indirizzo, citta, attiva, principale)
      VALUES ($1,'Sede senza piano','Via Test 2','Palermo',true,false) RETURNING id`,
-    [sede.cliente_id]
+    [base.cliente_id]
   );
 
   // ── SCENARIO A — creazione piano 2 visite/anno ────────────────────────────
@@ -105,8 +116,14 @@ try {
   check("ciclo 1 intatto (tutti eseguiti)", c1done.every(s => s.stato === "eseguita"));
 
   await c.query("ROLLBACK");
-  const exists = (await one(`SELECT to_regclass('public.piani_visite') t`)).t;
-  check("dopo ROLLBACK: tabelle non persistite", exists === null);
+  if (giaApplicata) {
+    // Le tabelle esistono in prod: verifico che i DATI di test siano stati annullati.
+    const rimasti = (await one(`SELECT count(*)::int n FROM piani_visite WHERE id=$1`, [piano.id])).n;
+    check("dopo ROLLBACK: dati di test non persistiti", rimasti === 0);
+  } else {
+    const exists = (await one(`SELECT to_regclass('public.piani_visite') t`)).t;
+    check("dopo ROLLBACK: tabelle non persistite", exists === null);
+  }
 } finally { await c.end(); }
 console.log(fail ? "\n✗ TEST FALLITO" : "\n✓ TUTTI GLI SCENARI OK");
 process.exit(fail ? 1 : 0);

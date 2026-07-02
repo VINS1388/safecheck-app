@@ -1,6 +1,8 @@
-import Link from "next/link";
 import { getVisiteUtente, type VisitaRiepilogo } from "@/lib/db/queries/visite";
 import { formatDate } from "@/lib/utils";
+import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
+import EmptyState from "@/components/ui/EmptyState";
+import AzioniVerbale from "./AzioniVerbale";
 
 export default async function VisitePage() {
   const visite = await getVisiteUtente();
@@ -8,27 +10,17 @@ export default async function VisitePage() {
   return (
     <main>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Visite</h1>
-        <p className="text-sm text-gray-600">
-          Sopralluoghi di sicurezza in corso e conclusi.
-        </p>
+        <h1 className="text-2xl font-semibold text-gray-900">Archivio verbali</h1>
+        <p className="text-sm text-gray-600">Sopralluoghi di sicurezza in corso e conclusi.</p>
       </div>
 
       {visite.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-900">Nessuna visita</p>
-          <p className="mt-1 text-sm text-gray-500">
-            Apri la scheda di un cliente e avvia una{" "}
-            <span className="font-medium">Nuova visita</span> da una delle sue
-            sedi.
-          </p>
-          <Link
-            href="/clienti"
-            className="mt-4 inline-block min-h-[44px] rounded-lg bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
-          >
-            Vai ai clienti
-          </Link>
-        </div>
+        <EmptyState
+          titolo="Nessuna visita"
+          descrizione="Apri la scheda di un cliente e avvia una nuova visita da una delle sue sedi."
+          ctaHref="/clienti"
+          ctaLabel="Vai ai clienti"
+        />
       ) : (
         <>
           {/* Card stack — mobile */}
@@ -39,38 +31,31 @@ export default async function VisitePage() {
           </div>
 
           {/* Tabella — desktop */}
-          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
+          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:block">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
+                  <th className="px-4 py-3 font-medium">Stato</th>
                   <th className="px-4 py-3 font-medium">Azienda</th>
                   <th className="px-4 py-3 font-medium">Sede</th>
                   <th className="px-4 py-3 font-medium">Data</th>
-                  <th className="px-4 py-3 font-medium">Verbale</th>
                   <th className="px-4 py-3 text-right font-medium">Azioni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {visite.map((v) => {
-                  const chiusa = v.numero_verbale != null;
-                  return (
-                    <tr key={v.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {v.cliente_nome}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{v.sede_nome}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {formatDate(v.data_visita)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <BadgeVerbale v={v} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Azioni v={v} chiusa={chiusa} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {visite.map((v) => (
+                  <tr key={v.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{v.cliente_nome}</td>
+                    <td className="px-4 py-3 text-gray-700">{v.sede_nome}</td>
+                    <td className="px-4 py-3 text-gray-700">{formatDate(v.data_visita)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -80,64 +65,7 @@ export default async function VisitePage() {
   );
 }
 
-function BadgeVerbale({ v }: { v: VisitaRiepilogo }) {
-  if (v.stato_verbale === "sostituito") {
-    return (
-      <span
-        className="inline-block rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-500"
-        title="Verbale sostituito — non più valido"
-      >
-        {v.numero_verbale} · Sostituito
-      </span>
-    );
-  }
-  if (v.numero_verbale != null) {
-    return (
-      <span className="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-        {v.numero_verbale}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-block rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-      Bozza
-    </span>
-  );
-}
-
-function Azioni({ v, chiusa }: { v: VisitaRiepilogo; chiusa: boolean }) {
-  // Verbale numerato (chiuso o sostituito): Leggi (riepilogo, da cui Duplica/
-  // Sostitutivo) + Scarica PDF. Bozza: Continua.
-  if (chiusa) {
-    return (
-      <span className="inline-flex items-center gap-4">
-        <Link
-          href={`/visite/${v.id}/riepilogo`}
-          className="font-medium text-[#1e3a5f] hover:underline"
-        >
-          Leggi
-        </Link>
-        <a
-          href={`/api/visite/${v.id}/download-pdf`}
-          className="font-medium text-[#1e3a5f] hover:underline"
-        >
-          Scarica PDF
-        </a>
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={`/visite/${v.id}/avvia`}
-      className="font-medium text-[#1e3a5f] hover:underline"
-    >
-      Continua
-    </Link>
-  );
-}
-
 function VisitaCard({ v }: { v: VisitaRiepilogo }) {
-  const chiusa = v.numero_verbale != null;
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
@@ -146,10 +74,10 @@ function VisitaCard({ v }: { v: VisitaRiepilogo }) {
           <p className="truncate text-sm text-gray-600">{v.sede_nome}</p>
           <p className="mt-0.5 text-xs text-gray-500">{formatDate(v.data_visita)}</p>
         </div>
-        <BadgeVerbale v={v} />
+        <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
       </div>
       <div className="mt-3 border-t border-gray-100 pt-3 text-right">
-        <Azioni v={v} chiusa={chiusa} />
+        <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
       </div>
     </div>
   );

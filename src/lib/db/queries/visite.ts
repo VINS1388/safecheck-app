@@ -246,6 +246,18 @@ export async function getVisiteByCliente(clienteId: string): Promise<VisitaRiepi
   return (data as unknown as VisitaConRelazioni[]).map(mapRiepilogo);
 }
 
+/** Elenco visite di una sede, ordinate per data decrescente. */
+export async function getVisiteBySede(sedeId: string): Promise<VisitaRiepilogo[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("visite")
+    .select(`id, stato, stato_verbale, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome )`)
+    .eq("sede_id", sedeId)
+    .order("data_visita", { ascending: false });
+  if (error || !data) return [];
+  return (data as unknown as VisitaConRelazioni[]).map(mapRiepilogo);
+}
+
 /**
  * Elenco di tutte le visite accessibili all'utente loggato.
  * La RLS limita già le righe a `specialist_id = auth.uid()` (o admin).
@@ -261,6 +273,24 @@ export async function getVisiteUtente(): Promise<VisitaRiepilogo[]> {
   if (error || !data) return [];
 
   return (data as unknown as VisitaConRelazioni[]).map(mapRiepilogo);
+}
+
+/**
+ * Elimina una visita SOLO se in bozza (guard server-side). I record figli
+ * (risposte, imprese, verbali_pdf, punteggi) cascadano; gli slot pianificati
+ * eventualmente collegati sono azzerati (ON DELETE SET NULL). Ritorna un esito
+ * leggibile: un vincolo residuo (es. genealogia) blocca senza corrompere dati.
+ */
+export async function eliminaVisitaBozza(id: string): Promise<{ ok: boolean; motivo?: string }> {
+  const supabase = await createClient();
+  const { data: v } = await supabase.from("visite").select("stato").eq("id", id).maybeSingle();
+  if (!v) return { ok: false, motivo: "Visita non trovata." };
+  if (v.stato !== "bozza") {
+    return { ok: false, motivo: "Solo le bozze possono essere eliminate." };
+  }
+  const { error } = await supabase.from("visite").delete().eq("id", id).eq("stato", "bozza");
+  if (error) return { ok: false, motivo: `Eliminazione non riuscita: ${error.message}` };
+  return { ok: true };
 }
 
 function mapRiepilogo(v: VisitaConRelazioni): VisitaRiepilogo {

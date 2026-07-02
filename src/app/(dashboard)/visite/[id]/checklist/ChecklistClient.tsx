@@ -1014,7 +1014,7 @@ function StatoBadge({ chiusa, numero }: { chiusa: boolean; numero: string | null
     );
   }
   return (
-    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-gray-600">
       Bozza
     </span>
   );
