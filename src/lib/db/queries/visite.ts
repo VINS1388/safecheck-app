@@ -276,20 +276,40 @@ export async function getVisiteUtente(): Promise<VisitaRiepilogo[]> {
 }
 
 /**
- * Elimina una visita SOLO se in bozza (guard server-side). I record figli
+ * Elimina una visita SOLO se è una bozza (guard server-side). I record figli
  * (risposte, imprese, verbali_pdf, punteggi) cascadano; gli slot pianificati
  * eventualmente collegati sono azzerati (ON DELETE SET NULL). Ritorna un esito
  * leggibile: un vincolo residuo (es. genealogia) blocca senza corrompere dati.
+ *
+ * Criterio "bozza" UNICO in tutto il sistema: `numero_verbale IS NULL` — lo
+ * stesso di `statoVerbaleUI` usato dall'archivio (chiuso e sostituito hanno
+ * sempre un numero_verbale; una bozza mai). Non usa più `stato='bozza'`, che è
+ * la colonna operativa e può divergere da `stato_verbale`.
+ *
+ * Verifica il risultato del DELETE: se 0 righe rimosse (RLS, riga già sparita,
+ * o non-bozza) ritorna un errore esplicito — mai successo silenzioso.
  */
 export async function eliminaVisitaBozza(id: string): Promise<{ ok: boolean; motivo?: string }> {
   const supabase = await createClient();
-  const { data: v } = await supabase.from("visite").select("stato").eq("id", id).maybeSingle();
+  const { data: v } = await supabase
+    .from("visite")
+    .select("numero_verbale")
+    .eq("id", id)
+    .maybeSingle();
   if (!v) return { ok: false, motivo: "Visita non trovata." };
-  if (v.stato !== "bozza") {
+  if (v.numero_verbale != null) {
     return { ok: false, motivo: "Solo le bozze possono essere eliminate." };
   }
-  const { error } = await supabase.from("visite").delete().eq("id", id).eq("stato", "bozza");
+  const { data: deleted, error } = await supabase
+    .from("visite")
+    .delete()
+    .eq("id", id)
+    .is("numero_verbale", null)
+    .select("id");
   if (error) return { ok: false, motivo: `Eliminazione non riuscita: ${error.message}` };
+  if (!deleted || deleted.length === 0) {
+    return { ok: false, motivo: "Impossibile eliminare la bozza." };
+  }
   return { ok: true };
 }
 

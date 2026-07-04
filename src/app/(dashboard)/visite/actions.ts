@@ -11,7 +11,8 @@ export async function eliminaBozzaAction(id: string): Promise<EliminaBozzaResult
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
   const res = await eliminaVisitaBozza(id);
+  if (!res.ok) return { ok: false, error: res.motivo ?? "Errore." };
   revalidatePath("/visite");
   revalidatePath("/dashboard");
-  return res.ok ? { ok: true } : { ok: false, error: res.motivo ?? "Errore." };
+  return { ok: true };
 }
