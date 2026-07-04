@@ -41,10 +41,14 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
       setMsg({ tipo: "err", testo: "Inserisci la data di inizio ciclo." });
       return;
     }
-    // Conferma esplicita quando si modifica un piano esistente (ricalcolo).
-    if (piano) {
+    // Il ricalcolo (distruttivo per le date) scatta solo su cambio STRUTTURALE
+    // (data inizio o numero visite). Cambiare solo il tecnico default non rigenera
+    // nulla → nessuna conferma necessaria.
+    const strutturale =
+      !!piano && (dataInizio !== piano.dataInizioCiclo || visiteAnno !== piano.visiteAnno);
+    if (strutturale) {
       const ok = window.confirm(
-        `Verranno rigenerate le date per le ${nonEseguiti} visite non ancora eseguite di questo ciclo. Le visite già eseguite non vengono toccate.`
+        `Verranno rigenerate le date per le ${nonEseguiti} visite non ancora eseguite di questo ciclo. Le visite già eseguite e quelle con tecnico assegnato a mano mantengono il tecnico; le altre seguono il default. Le visite già eseguite non vengono toccate.`
       );
       if (!ok) return;
     }
@@ -58,10 +62,13 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
     });
     setSalvando(false);
     if (res.ok) {
-      setMsg({
-        tipo: "ok",
-        testo: res.ricalcolato ? "Piano aggiornato e date ricalcolate." : "Piano creato e visite generate.",
-      });
+      const testo =
+        res.esito === "creato"
+          ? "Piano creato e visite generate."
+          : res.esito === "ricalcolato"
+            ? "Piano aggiornato e date ricalcolate."
+            : "Tecnico predefinito aggiornato sulle visite che seguono il default.";
+      setMsg({ tipo: "ok", testo });
       router.refresh();
     } else {
       setMsg({ tipo: "err", testo: res.error });
@@ -111,7 +118,9 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Tecnico assegnato</label>
+          <label className="block text-sm font-medium text-gray-700">
+            Tecnico predefinito (per le nuove visite del piano)
+          </label>
           <select value={tecnico} onChange={(e) => setTecnico(e.target.value)} className={`mt-1 ${INPUT}`}>
             <option value="">— Nessuno —</option>
             {tecnici.map((t) => (
@@ -120,6 +129,9 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
               </option>
             ))}
           </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Le visite con tecnico assegnato manualmente non vengono modificate.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">

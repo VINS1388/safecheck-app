@@ -111,7 +111,8 @@ export interface SlotPianificazione extends VisitaPianificata {
   clienteId: string;
   clienteNome: string;
   sedeNome: string;
-  tecnicoId: string | null;
+  tecnicoId: string | null;          // tecnico DELLO SLOT (Sprint 15.2)
+  tecnicoPersonalizzato: boolean;    // true = assegnato a mano, non segue il default piano
 }
 
 interface SlotRow {
@@ -124,33 +125,35 @@ interface SlotRow {
   data_pianificata: string | null;
   stato: string;
   visita_id: string | null;
+  tecnico_assegnato_id: string | null;
+  tecnico_personalizzato: boolean;
   sedi: { nome: string; cliente_id: string; clienti: { ragione_sociale: string } | { ragione_sociale: string }[] | null } | { nome: string; cliente_id: string; clienti: unknown }[] | null;
-  piani_visite: { tecnico_assegnato_id: string | null } | { tecnico_assegnato_id: string | null }[] | null;
 }
 
 /**
  * Tutti gli slot pianificati, arricchiti con cliente/sede/tecnico, ordinati per
  * data effettiva (COALESCE(data_pianificata, data_suggerita)) crescente.
+ * Il tecnico è quello DELLO SLOT (Sprint 15.2), non più del piano.
  */
 export async function getPianificazione(): Promise<SlotPianificazione[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("visite_pianificate").select(
     `id, piano_id, sede_id, numero_visita, ciclo_numero, data_suggerita, data_pianificata, stato, visita_id,
-     sedi ( nome, cliente_id, clienti ( ragione_sociale ) ),
-     piani_visite ( tecnico_assegnato_id )`
+     tecnico_assegnato_id, tecnico_personalizzato,
+     sedi ( nome, cliente_id, clienti ( ragione_sociale ) )`
   );
   if (error || !data) return [];
 
   const rows = (data as unknown as SlotRow[]).map((d) => {
     const sede = first(d.sedi) as { nome: string; cliente_id: string; clienti: unknown } | null;
     const cliente = first(sede?.clienti as { ragione_sociale: string } | { ragione_sociale: string }[] | null);
-    const piano = first(d.piani_visite);
     return {
       ...mapSlot(d),
       clienteId: sede?.cliente_id ?? "",
       clienteNome: cliente?.ragione_sociale ?? "—",
       sedeNome: sede?.nome ?? "—",
-      tecnicoId: piano?.tecnico_assegnato_id ?? null,
+      tecnicoId: d.tecnico_assegnato_id ?? null,
+      tecnicoPersonalizzato: d.tecnico_personalizzato ?? false,
     };
   });
 
@@ -160,18 +163,214 @@ export async function getPianificazione(): Promise<SlotPianificazione[]> {
   return rows;
 }
 
+/** Slot proponibile alla creazione di una nuova visita (ciclo corrente, ancora libero). */
+export interface SlotProponibile {
+  id: string;
+  numeroVisita: number;
+  totale: number; // N visite del ciclo (per l'etichetta "N/T")
+  dataEffettiva: string; // data_pianificata ?? data_suggerita
+  isSuggerita: boolean; // true se non c'è ancora una data pianificata
+  tecnicoId: string | null;
+  tecnicoNome: string | null;
+}
+
 /**
- * Imposta la data pianificata di uno slot (→ stato 'pianificata'). Non tocca gli
- * slot 'eseguita' (guard server-side: la macchina a stati resta coerente).
+ * Slot collegabili a una nuova visita per una sede: SOLO ciclo corrente,
+ * `visita_id IS NULL`, stato in ('da_pianificare','pianificata'), ordinati per
+ * numero_visita. Vuoto se la sede non ha piano o non ha slot liberi.
  */
-export async function updateDataPianificata(slotId: string, dataPianificata: string): Promise<void> {
+export async function getSlotProponibiliBySede(sedeId: string): Promise<SlotProponibile[]> {
+  const supabase = await createClient();
+  const { data: piano } = await supabase
+    .from("piani_visite")
+    .select("id, ciclo_corrente, visite_anno")
+    .eq("sede_id", sedeId)
+    .maybeSingle();
+  if (!piano) return [];
+
+  const { data: slots } = await supabase
+    .from("visite_pianificate")
+    .select("id, numero_visita, data_suggerita, data_pianificata, tecnico_assegnato_id")
+    .eq("piano_id", piano.id)
+    .eq("ciclo_numero", piano.ciclo_corrente)
+    .is("visita_id", null)
+    .in("stato", ["da_pianificare", "pianificata"])
+    .order("numero_visita", { ascending: true });
+  if (!slots || slots.length === 0) return [];
+
+  // Nomi tecnici (anche non attivi, per un'etichetta sempre leggibile).
+  const ids = Array.from(
+    new Set(slots.map((s) => s.tecnico_assegnato_id).filter((x): x is string => !!x))
+  );
+  const nomi = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data: utenti } = await supabase
+      .from("utenti")
+      .select("id, nome_completo")
+      .in("id", ids);
+    for (const u of utenti ?? []) nomi.set(u.id, u.nome_completo);
+  }
+
+  return slots.map((s) => ({
+    id: s.id,
+    numeroVisita: s.numero_visita,
+    totale: piano.visite_anno,
+    dataEffettiva: s.data_pianificata ?? s.data_suggerita,
+    isSuggerita: s.data_pianificata == null,
+    tecnicoId: s.tecnico_assegnato_id ?? null,
+    tecnicoNome: s.tecnico_assegnato_id ? nomi.get(s.tecnico_assegnato_id) ?? null : null,
+  }));
+}
+
+/** Sedi di un cliente che hanno ≥1 slot proponibile nel ciclo corrente. */
+export async function getSediConSlotProponibili(clienteId: string): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("visite_pianificate")
+    .select(
+      "sede_id, ciclo_numero, piani_visite!inner ( ciclo_corrente ), sedi!inner ( cliente_id )"
+    )
+    .eq("sedi.cliente_id", clienteId)
+    .is("visita_id", null)
+    .in("stato", ["da_pianificare", "pianificata"]);
+  const out = new Set<string>();
+  for (const r of (data ?? []) as unknown as {
+    sede_id: string;
+    ciclo_numero: number;
+    piani_visite: { ciclo_corrente: number } | { ciclo_corrente: number }[] | null;
+  }[]) {
+    const piano = first(r.piani_visite);
+    if (piano && r.ciclo_numero === piano.ciclo_corrente) out.add(r.sede_id);
+  }
+  return out;
+}
+
+/**
+ * Riverifica server-side (anti-concorrenza) che un singolo slot sia ancora
+ * proponibile: ciclo corrente del suo piano, libero, non eseguito.
+ */
+export async function slotAncoraProponibile(slotId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("visite_pianificate")
+    .select("ciclo_numero, visita_id, stato, piani_visite!inner ( ciclo_corrente )")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (!data) return false;
+  const piano = first(
+    (data as { piani_visite: { ciclo_corrente: number } | { ciclo_corrente: number }[] | null }).piani_visite
+  );
+  return (
+    data.visita_id == null &&
+    (data.stato === "da_pianificare" || data.stato === "pianificata") &&
+    !!piano &&
+    data.ciclo_numero === piano.ciclo_corrente
+  );
+}
+
+/**
+ * Collega uno slot a una visita in modo ATOMICO (Opzione A: setta SOLO
+ * `visita_id`, lo stato resta invariato — la transizione a 'eseguita' avverrà
+ * alla chiusura del verbale). Guard `visita_id IS NULL AND stato <> 'eseguita'`:
+ * se 0 righe → un'altra visita ha vinto la corsa. Ritorna true se collegato.
+ */
+export async function collegaSlot(slotId: string, visitaId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("visite_pianificate")
+    .update({ visita_id: visitaId })
+    .eq("id", slotId)
+    .is("visita_id", null)
+    .neq("stato", "eseguita")
+    .select("id");
+  if (error) throw new Error(`Errore collegamento slot: ${error.message}`);
+  return (data?.length ?? 0) > 0;
+}
+
+/** Verifica che un tecnico esista e sia attivo (validazione server-side del dropdown). */
+async function tecnicoAttivo(tecnicoId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("utenti")
+    .select("id")
+    .eq("id", tecnicoId)
+    .eq("attivo", true)
+    .maybeSingle();
+  return !!data;
+}
+
+/**
+ * Salva le modifiche inline di uno slot: data pianificata e/o tecnico. Solo i
+ * campi realmente modificati vengono passati (dirty-tracking lato client) —
+ * `undefined` = non toccato, così un salvataggio della sola data non altera il
+ * tecnico né il flag, e viceversa.
+ * - `dataPianificata` presente → set data + stato 'pianificata'.
+ * - `tecnico` presente → assegnazione ESPLICITA: tecnico + `tecnico_personalizzato = true`
+ *   SEMPRE (anche se coincide col default del piano). Valida che il tecnico
+ *   (se non null) esista e sia attivo.
+ * Guard: mai su slot 'eseguita'.
+ */
+export async function salvaModificheSlot(
+  slotId: string,
+  input: { dataPianificata?: string; tecnico?: { id: string | null } }
+): Promise<void> {
+  const upd: Record<string, unknown> = {};
+
+  if (input.dataPianificata !== undefined) {
+    if (!input.dataPianificata) throw new Error("Data pianificata non valida.");
+    upd.data_pianificata = input.dataPianificata;
+    upd.stato = "pianificata";
+  }
+
+  if (input.tecnico !== undefined) {
+    const id = input.tecnico.id;
+    if (id && !(await tecnicoAttivo(id))) {
+      throw new Error("Il tecnico selezionato non è valido o non è più attivo.");
+    }
+    upd.tecnico_assegnato_id = id;
+    upd.tecnico_personalizzato = true; // assegnazione esplicita, senza eccezioni
+  }
+
+  if (Object.keys(upd).length === 0) return; // niente da salvare
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("visite_pianificate")
-    .update({ data_pianificata: dataPianificata, stato: "pianificata" })
+    .update(upd)
     .eq("id", slotId)
     .neq("stato", "eseguita");
-  if (error) throw new Error(`Errore aggiornamento data pianificata: ${error.message}`);
+  if (error) throw new Error(`Errore salvataggio slot: ${error.message}`);
+}
+
+/**
+ * Ripristina il tecnico di uno slot al default corrente del piano
+ * (`tecnico_personalizzato = false`): lo slot torna a seguire i futuri cambi di
+ * default. Non tocca data/stato. Guard: mai su slot 'eseguita'.
+ */
+export async function ripristinaTecnicoDefault(slotId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: slot } = await supabase
+    .from("visite_pianificate")
+    .select("piano_id")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (!slot) throw new Error("Slot non trovato.");
+
+  const { data: piano } = await supabase
+    .from("piani_visite")
+    .select("tecnico_assegnato_id")
+    .eq("id", slot.piano_id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("visite_pianificate")
+    .update({
+      tecnico_assegnato_id: piano?.tecnico_assegnato_id ?? null,
+      tecnico_personalizzato: false,
+    })
+    .eq("id", slotId)
+    .neq("stato", "eseguita");
+  if (error) throw new Error(`Errore ripristino default: ${error.message}`);
 }
 
 /** Riepilogo di un piano con stato del ciclo corrente e idoneità al ciclo successivo. */
@@ -247,14 +446,24 @@ export interface SalvaPianoInput {
   tecnicoAssegnatoId: string | null;
 }
 
+/** Esito del salvataggio piano — guida il messaggio in UI e la conferma di ricalcolo. */
+export type EsitoSalvaPiano = "creato" | "ricalcolato" | "tecnico_aggiornato";
+
 /**
  * Crea o aggiorna il piano di una sede.
- * - Nuovo piano → genera gli N slot del ciclo 1 (`genera_slot_ciclo`).
- * - Piano esistente → aggiorna i campi e ricalcola SOLO gli slot non eseguiti
- *   del ciclo corrente (`ricalcola_slot_ciclo`); gli slot eseguiti restano intatti.
- * @returns `{ ricalcolato }` — true se era un aggiornamento (slot rigenerati).
+ * - Nuovo piano → genera gli N slot del ciclo 1 (`genera_slot_ciclo`). → `creato`.
+ * - Piano esistente, cambio STRUTTURALE (data inizio o numero visite) → aggiorna
+ *   i campi e ricalcola gli slot non eseguiti del ciclo corrente
+ *   (`ricalcola_slot_ciclo`, che preserva gli slot personalizzati via flag).
+ *   → `ricalcolato`.
+ * - Piano esistente, cambia SOLO il tecnico default (data/numero invariati) →
+ *   nessuna rigenerazione (sarebbe distruttiva per le date): UPDATE mirato del
+ *   default sui soli slot NON personalizzati e NON eseguiti del ciclo corrente.
+ *   → `tecnico_aggiornato`. Gli slot con `tecnico_personalizzato = true` restano
+ *   intatti; il cambio propaga solo a chi segue il default.
+ * In tutti i casi gli slot `eseguita` non vengono mai toccati.
  */
-export async function salvaPiano(input: SalvaPianoInput): Promise<{ ricalcolato: boolean }> {
+export async function salvaPiano(input: SalvaPianoInput): Promise<{ esito: EsitoSalvaPiano }> {
   const supabase = await createClient();
   const esistente = await getPianoBySede(input.sedeId);
 
@@ -280,8 +489,12 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ ricalcolato:
       p_visite_anno: input.visiteAnno,
     });
     if (genErr) throw new Error(`Errore generazione slot: ${genErr.message}`);
-    return { ricalcolato: false };
+    return { esito: "creato" };
   }
+
+  const strutturale =
+    input.dataInizioCiclo !== esistente.dataInizioCiclo ||
+    input.visiteAnno !== esistente.visiteAnno;
 
   const { error: updErr } = await supabase
     .from("piani_visite")
@@ -293,6 +506,21 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ ricalcolato:
     .eq("id", esistente.id);
   if (updErr) throw new Error(`Errore aggiornamento piano: ${updErr.message}`);
 
+  if (!strutturale) {
+    // Solo tecnico default cambiato: propaga ai soli slot non personalizzati del
+    // ciclo corrente, senza toccare date/stati. Il flag protegge le assegnazioni
+    // esplicite del planner.
+    const { error: propErr } = await supabase
+      .from("visite_pianificate")
+      .update({ tecnico_assegnato_id: input.tecnicoAssegnatoId })
+      .eq("piano_id", esistente.id)
+      .eq("ciclo_numero", esistente.cicloCorrente)
+      .eq("tecnico_personalizzato", false)
+      .neq("stato", "eseguita");
+    if (propErr) throw new Error(`Errore aggiornamento tecnico default: ${propErr.message}`);
+    return { esito: "tecnico_aggiornato" };
+  }
+
   const { error: recErr } = await supabase.rpc("ricalcola_slot_ciclo", {
     p_piano_id: esistente.id,
     p_sede_id: input.sedeId,
@@ -301,5 +529,5 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ ricalcolato:
     p_visite_anno: input.visiteAnno,
   });
   if (recErr) throw new Error(`Errore ricalcolo slot: ${recErr.message}`);
-  return { ricalcolato: true };
+  return { esito: "ricalcolato" };
 }

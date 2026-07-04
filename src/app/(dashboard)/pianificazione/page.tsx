@@ -26,8 +26,12 @@ export default async function PianificazionePage() {
     dataPianificata: s.dataPianificata,
     stato: s.stato,
     visitaId: s.visitaId,
+    tecnicoId: s.tecnicoId,
     tecnicoNome: s.tecnicoId ? tecnicoNome.get(s.tecnicoId) ?? null : null,
+    tecnicoPersonalizzato: s.tecnicoPersonalizzato,
   }));
+
+  const tecniciOpzioni = tecnici.map((t) => ({ id: t.id, nome: t.nomeCompleto }));
 
   // Clienti unici (per il filtro), ordinati per nome.
   const clientiFiltro = Array.from(
@@ -48,7 +52,7 @@ export default async function PianificazionePage() {
       </div>
 
       <PianiContrattuali piani={piani} />
-      <PianificazioneClient slots={righe} clientiFiltro={clientiFiltro} oggi={oggi} />
+      <PianificazioneClient slots={righe} clientiFiltro={clientiFiltro} tecnici={tecniciOpzioni} oggi={oggi} />
     </main>
   );
 }

@@ -3,25 +3,45 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { updateDataPianificata } from "@/lib/db/queries/pianificazione";
+import {
+  salvaModificheSlot,
+  ripristinaTecnicoDefault,
+} from "@/lib/db/queries/pianificazione";
 
 export type SetDataResult = { ok: true } | { ok: false; error: string };
 export type GeneraCicloResult = { ok: true; nuovi: number } | { ok: false; error: string };
 
-/** Imposta la data pianificata di uno slot (→ 'pianificata'). */
-export async function setDataPianificataAction(
+/**
+ * Salva le modifiche inline di uno slot (data e/o tecnico). Solo i campi
+ * modificati vengono passati: `dataPianificata`/`tecnico` sono opzionali e
+ * `undefined` significa "non toccato". L'assegnazione del tecnico imposta
+ * `tecnico_personalizzato = true` (gestito nel data layer).
+ */
+export async function salvaSlotAction(
   slotId: string,
-  dataPianificata: string
+  input: { dataPianificata?: string; tecnico?: { id: string | null } }
 ): Promise<SetDataResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
-  if (!dataPianificata) return { ok: false, error: "Seleziona una data." };
   try {
-    await updateDataPianificata(slotId, dataPianificata);
+    await salvaModificheSlot(slotId, input);
     revalidatePath("/pianificazione");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore durante il salvataggio." };
+  }
+}
+
+/** Ripristina il tecnico dello slot al default del piano (flag → false). */
+export async function ripristinaDefaultSlotAction(slotId: string): Promise<SetDataResult> {
+  const { user } = await getCurrentUser();
+  if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  try {
+    await ripristinaTecnicoDefault(slotId);
+    revalidatePath("/pianificazione");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Errore durante il ripristino." };
   }
 }
 

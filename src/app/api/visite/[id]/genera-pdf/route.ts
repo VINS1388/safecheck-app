@@ -315,31 +315,29 @@ export async function POST(
       throw new Error(`Chiusura visita fallita: ${updErr.message}`);
     }
 
-    // 11-bis. Aggancio automatico slot pianificato (Sprint 15): best-effort.
-    //   Cerca il primo slot libero della sede (per ciclo/numero) e lo marca
-    //   'eseguita' collegandolo al verbale appena chiuso. NON blocca né condiziona
-    //   la chiusura: try/catch DEDICATO — un errore qui non deve mai propagarsi al
-    //   catch esterno (che farebbe rollback della chiusura). Sede senza piano o
-    //   ciclo già completo → nessuno slot → nessuna azione, nessun errore.
+    // 11-bis. Transizione dello slot collegato a 'eseguita' (Sprint 15.2, Opzione A).
+    //   Il collegamento visita↔slot è ESPLICITO alla creazione visita (STEP 3):
+    //   qui si marca 'eseguita' SOLO lo slot già collegato a QUESTA visita, per
+    //   match su visita_id — mai ricerca per sede/"primo slot libero" (rimosso).
+    //   Visita fuori piano → nessuno slot collegato → 0 righe toccate = corretto,
+    //   nessuna anomalia. try/catch DEDICATO: la chiusura del verbale non deve
+    //   mai fallire per un problema sullo slot. Un errore REALE (non 0 match) è
+    //   però loggato con contesto: lascerebbe lo slot "in lavorazione" perpetuo.
     try {
-      const { data: slot } = await admin
+      const { error: slotErr } = await admin
         .from("visite_pianificate")
-        .select("id")
-        .eq("sede_id", visita.sede_id)
-        .in("stato", ["da_pianificare", "pianificata"])
-        .order("ciclo_numero", { ascending: true })
-        .order("numero_visita", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (slot) {
-        await admin
-          .from("visite_pianificate")
-          .update({ visita_id: visita.id, stato: "eseguita" })
-          .eq("id", slot.id);
+        .update({ stato: "eseguita" })
+        .eq("visita_id", visita.id)
+        .neq("stato", "eseguita");
+      if (slotErr) {
+        console.error(
+          `transizione slot 'eseguita' fallita (non bloccante) visitaId=${visita.id}:`,
+          slotErr.message
+        );
       }
     } catch (aggErr) {
       console.error(
-        "aggancio slot pianificato (non bloccante):",
+        `transizione slot 'eseguita' fallita (non bloccante) visitaId=${visita.id}:`,
         aggErr instanceof Error ? aggErr.message : aggErr
       );
     }

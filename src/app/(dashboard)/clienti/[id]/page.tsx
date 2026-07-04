@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClienteById } from "@/lib/db/queries/clienti";
 import { getVisiteByCliente, type VisitaRiepilogo } from "@/lib/db/queries/visite";
-import { getPianificazione } from "@/lib/db/queries/pianificazione";
+import { getPianificazione, getSediConSlotProponibili } from "@/lib/db/queries/pianificazione";
 import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -23,7 +23,11 @@ export default async function ClienteDettaglioPage({
   const cliente = await getClienteById(id);
   if (!cliente) notFound();
 
-  const [visite, slots] = await Promise.all([getVisiteByCliente(id), getPianificazione()]);
+  const [visite, slots, sediConSlot] = await Promise.all([
+    getVisiteByCliente(id),
+    getPianificazione(),
+    getSediConSlotProponibili(id),
+  ]);
   const bozze = visite.filter((v) => v.stato === "bozza").length;
   const generati = visite.filter((v) => v.stato_verbale === "chiuso").length;
 
@@ -168,14 +172,24 @@ export default async function ClienteDettaglioPage({
                       )}
                     </div>
                   </div>
-                  <form action={nuovaVisitaAction.bind(null, cliente.id, s.id)}>
-                    <button
-                      type="submit"
-                      className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"
+                  {sediConSlot.has(s.id) ? (
+                    // La sede ha slot pianificati: il selettore vive nella scheda sede.
+                    <Link
+                      href={`/clienti/${cliente.id}/sedi/${s.id}`}
+                      className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"
                     >
                       Nuova visita
-                    </button>
-                  </form>
+                    </Link>
+                  ) : (
+                    <form action={nuovaVisitaAction.bind(null, cliente.id, s.id)}>
+                      <button
+                        type="submit"
+                        className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"
+                      >
+                        Nuova visita
+                      </button>
+                    </form>
+                  )}
                 </div>
 
                 {/* Azioni gestione sede */}

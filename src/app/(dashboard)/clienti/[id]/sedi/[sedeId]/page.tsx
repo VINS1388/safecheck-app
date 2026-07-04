@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { getClienteById } from "@/lib/db/queries/clienti";
 import { getSedeById } from "@/lib/db/queries/sedi";
 import { getVisiteBySede } from "@/lib/db/queries/visite";
-import { getPianoBySede, getSlotByPianoCiclo, getTecnici } from "@/lib/db/queries/pianificazione";
+import { getPianoBySede, getSlotByPianoCiclo, getTecnici, getSlotProponibiliBySede } from "@/lib/db/queries/pianificazione";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/utils";
 import { ETICHETTE_STATO_SLOT } from "@/types";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import { nuovaVisitaAction } from "./nuova-visita/actions";
+import NuovaVisitaConSlot from "./NuovaVisitaConSlot";
 import DuplicaUltimo from "./DuplicaUltimo";
 
 export default async function SedeDettaglioPage({
@@ -21,11 +23,13 @@ export default async function SedeDettaglioPage({
   const sede = await getSedeById(sedeId);
   if (!sede || sede.cliente_id !== id) notFound();
 
-  const [cliente, visite, piano, tecnici] = await Promise.all([
+  const [cliente, visite, piano, tecnici, slotProponibili, { user }] = await Promise.all([
     getClienteById(id),
     getVisiteBySede(sedeId),
     getPianoBySede(sedeId),
     getTecnici(),
+    getSlotProponibiliBySede(sedeId),
+    getCurrentUser(),
   ]);
   const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
   const prossimoSlot = slots.find((s) => s.stato !== "eseguita") ?? null;
@@ -71,29 +75,41 @@ export default async function SedeDettaglioPage({
         </div>
       </div>
 
-      {/* Call-to-action operative */}
-      <div className="mb-8 flex flex-wrap items-center gap-2">
-        <form action={nuovaVisitaAction.bind(null, id, sedeId)}>
-          <button
-            type="submit"
-            className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+      {/* Nuova visita: selettore slot se la sede ha visite pianificate proponibili,
+          altrimenti creazione diretta "fuori piano" (zero frizione). */}
+      <div className="mb-8 space-y-3">
+        {slotProponibili.length > 0 && user ? (
+          <NuovaVisitaConSlot
+            clienteId={id}
+            sedeId={sedeId}
+            slots={slotProponibili}
+            currentUserId={user.id}
+          />
+        ) : (
+          <form action={nuovaVisitaAction.bind(null, id, sedeId)}>
+            <button
+              type="submit"
+              className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            >
+              Nuova visita
+            </button>
+          </form>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {ultimoChiuso && <DuplicaUltimo visitaId={ultimoChiuso.id} />}
+          <Link
+            href="/visite"
+            className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
           >
-            Nuova visita
-          </button>
-        </form>
-        {ultimoChiuso && <DuplicaUltimo visitaId={ultimoChiuso.id} />}
-        <Link
-          href="/visite"
-          className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-        >
-          Apri archivio
-        </Link>
-        <Link
-          href="/pianificazione"
-          className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-        >
-          Apri pianificazione
-        </Link>
+            Apri archivio
+          </Link>
+          <Link
+            href="/pianificazione"
+            className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            Apri pianificazione
+          </Link>
+        </div>
       </div>
 
       {/* Piano visite (se configurato) */}
@@ -119,6 +135,11 @@ export default async function SedeDettaglioPage({
                 {formatDate(prossimoSlot.dataPianificata ?? prossimoSlot.dataSuggerita)}
               </span>{" "}
               <span className="text-xs text-gray-400">({ETICHETTE_STATO_SLOT[prossimoSlot.stato]})</span>
+              {prossimoSlot.visitaId && (
+                <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                  bozza in corso
+                </span>
+              )}
             </p>
           ) : (
             <p className="mt-2 text-sm text-gray-500">Ciclo corrente completato.</p>

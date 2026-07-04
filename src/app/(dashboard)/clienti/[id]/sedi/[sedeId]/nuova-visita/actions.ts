@@ -2,11 +2,15 @@
 
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { creaVisita } from "@/lib/db/queries/visite";
+import { creaVisita, eliminaVisitaBozza } from "@/lib/db/queries/visite";
+import {
+  slotAncoraProponibile,
+  collegaSlot,
+} from "@/lib/db/queries/pianificazione";
 
 /**
- * Crea una nuova visita in bozza per la sede e reindirizza alla schermata
- * di avvio sopralluogo. Da usare in un <form> della scheda sede:
+ * Crea una nuova visita in bozza "fuori piano" (nessuno slot da collegare) e
+ * reindirizza. Usata dove non esistono slot proponibili (zero frizione):
  *   <form action={nuovaVisitaAction.bind(null, clienteId, sedeId)}>
  */
 export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
@@ -22,4 +26,57 @@ export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
   });
 
   redirect(`/visite/${visitaId}/avvia`);
+}
+
+export type CreaVisitaConSlotResult =
+  | { ok: true; visitaId: string }
+  | { ok: false; error: string };
+
+/**
+ * Crea una nuova visita collegandola (o meno) a uno slot del piano.
+ * `scelta` = id dello slot, oppure "fuori-piano".
+ *
+ * Atomicità del collegamento (FK impone create-before-link):
+ *   1. re-verifica che lo slot sia ancora proponibile (early-out pulito);
+ *   2. crea la visita (bozza);
+ *   3. collega lo slot con guard atomico `visita_id IS NULL`;
+ *   4. se il collegamento perde la corsa → elimina la bozza appena creata
+ *      (compensazione) e restituisce un errore di ricarica. All-or-nothing,
+ *      nessun verbale orfano, nessun 500.
+ * `specialist_id` = utente creatore (Decisione B), indipendente dal tecnico
+ * dello slot. Lo slot passa a 'eseguita' solo alla chiusura verbale (STEP 4).
+ */
+export async function creaVisitaConSlotAction(
+  clienteId: string,
+  sedeId: string,
+  scelta: string
+): Promise<CreaVisitaConSlotResult> {
+  const { user } = await getCurrentUser();
+  if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+
+  if (!scelta) return { ok: false, error: "Seleziona un'opzione per continuare." };
+
+  if (scelta === "fuori-piano") {
+    const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id });
+    return { ok: true, visitaId };
+  }
+
+  const slotId = scelta;
+  const conflitto =
+    "Questo slot è stato appena collegato a un'altra visita. Ricarica la pagina e riprova.";
+
+  if (!(await slotAncoraProponibile(slotId))) {
+    return { ok: false, error: conflitto };
+  }
+
+  const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id });
+
+  const collegato = await collegaSlot(slotId, visitaId);
+  if (!collegato) {
+    // Corsa persa nella finestra tra re-verifica e collegamento: annulla la bozza.
+    await eliminaVisitaBozza(visitaId);
+    return { ok: false, error: conflitto };
+  }
+
+  return { ok: true, visitaId };
 }

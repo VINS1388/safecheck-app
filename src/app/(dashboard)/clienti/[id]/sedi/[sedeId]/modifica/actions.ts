@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { salvaPiano } from "@/lib/db/queries/pianificazione";
+import { salvaPiano, type EsitoSalvaPiano } from "@/lib/db/queries/pianificazione";
 
 export type SalvaPianoResult =
-  | { ok: true; ricalcolato: boolean }
+  | { ok: true; esito: EsitoSalvaPiano }
   | { ok: false; error: string };
 
 export interface SalvaPianoActionInput {
@@ -31,10 +31,10 @@ export async function salvaPianoAction(
   }
 
   try {
-    const { ricalcolato } = await salvaPiano(input);
+    const { esito } = await salvaPiano(input);
     revalidatePath(`/clienti/${clienteId}/sedi/${input.sedeId}/modifica`);
     revalidatePath("/pianificazione");
-    return { ok: true, ricalcolato };
+    return { ok: true, esito };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore durante il salvataggio del piano." };
   }
