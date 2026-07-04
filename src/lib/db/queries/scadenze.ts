@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getScopeVisibilita } from "@/lib/auth/scope";
 import type {
   Scadenza,
   StatoScadenza,
@@ -64,12 +65,22 @@ function mapRiga(r: ScadenzaRow): ScadenzaRiga {
 export async function getScadenze(filtro: FiltroScadenze = {}): Promise<ScadenzaRiga[]> {
   const supabase = await createClient();
 
+  // Sprint 16: il tecnico vede solo le scadenze delle sedi raggiungibili
+  // (coerente con la futura RLS su scadenze); admin/planner vedono tutto.
+  const scope = await getScopeVisibilita();
+  if (scope.mode === "none") return [];
+
   let q = supabase
     .from("scadenze")
     .select(
       "id, tipo, cliente_id, sede_id, riferimento_tipo, riferimento_id, data_riferimento, periodicita_mesi, data_scadenza, stato, note, clienti(ragione_sociale), sedi(nome)"
     )
     .order("data_scadenza", { ascending: true });
+
+  if (scope.mode === "tecnico") {
+    if (scope.sedeIds.size === 0) return [];
+    q = q.in("sede_id", Array.from(scope.sedeIds));
+  }
 
   if (filtro.stato) q = q.eq("stato", filtro.stato);
   if (filtro.clienteId) q = q.eq("cliente_id", filtro.clienteId);

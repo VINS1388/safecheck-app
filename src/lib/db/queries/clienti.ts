@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database.types";
 import type { Sede, EsitoOperazione } from "./sedi";
+import { getScopeVisibilita } from "@/lib/auth/scope";
 
 export type Cliente = Tables<"clienti">;
 
@@ -27,15 +28,30 @@ export interface CreaClienteInput {
   email_referente?: string | null;
 }
 
-/** Lista clienti attivi con il numero di sedi, ordinati per ragione sociale. */
+/**
+ * Lista clienti attivi con il numero di sedi, ordinati per ragione sociale.
+ * Sprint 16: filtro applicativo per ruolo (UX/perf, coerente con la futura RLS) —
+ * il tecnico vede solo i clienti raggiungibili (via visite proprie o slot
+ * assegnati); admin/planner vedono tutto.
+ */
 export async function getClienti(): Promise<ClienteRiepilogo[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const scope = await getScopeVisibilita();
+  if (scope.mode === "none") return [];
+
+  let q = supabase
     .from("clienti")
     .select("id, ragione_sociale, citta, sedi(count)")
     .eq("attivo", true)
     .order("ragione_sociale", { ascending: true });
+
+  if (scope.mode === "tecnico") {
+    if (scope.clienteIds.size === 0) return [];
+    q = q.in("id", Array.from(scope.clienteIds));
+  }
+
+  const { data, error } = await q;
 
   if (error || !data) return [];
 

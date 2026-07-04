@@ -86,6 +86,11 @@ try {
     return r.rows[0].id;
   }
 
+  // Simula lo stato PRE-FIX: la migration 023 è ormai permanente in prod, quindi
+  // per riprodurre il bug (policy DELETE assente) la rimuovo nella transazione
+  // (rolled back → prod invariata). Poi la 023 la ri-crea.
+  await c.query(`DROP POLICY IF EXISTS "visite_delete_own_or_admin" ON public.visite`);
+
   // ── 0. Root cause: SENZA policy DELETE → deny silenzioso ──
   const bRoot = await nuovaBozza();
   const nRoot = await asUser(owner, () => deleteBozza(bRoot));

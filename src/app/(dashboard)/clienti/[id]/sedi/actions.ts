@@ -3,11 +3,14 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import {
   aggiornaSede,
   eliminaSede,
   impostaSedePrincipale,
 } from "@/lib/db/queries/sedi";
+
+const ERR_PERM = encodeURIComponent("Non hai i permessi per questa operazione.");
 
 function opt(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? "").trim();
@@ -18,6 +21,7 @@ function opt(formData: FormData, key: string): string | null {
 export async function aggiornaSedeAction(clienteId: string, sedeId: string, formData: FormData) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
 
   const nome = String(formData.get("nome") ?? "").trim();
   const indirizzo = String(formData.get("indirizzo") ?? "").trim();
@@ -44,6 +48,7 @@ export async function aggiornaSedeAction(clienteId: string, sedeId: string, form
 export async function eliminaSedeAction(clienteId: string, sedeId: string) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
 
   const esito = await eliminaSede(sedeId);
   revalidatePath(`/clienti/${clienteId}`);
@@ -57,6 +62,7 @@ export async function eliminaSedeAction(clienteId: string, sedeId: string) {
 export async function impostaSedePrincipaleAction(clienteId: string, sedeId: string) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
 
   await impostaSedePrincipale(clienteId, sedeId);
   revalidatePath(`/clienti/${clienteId}`);

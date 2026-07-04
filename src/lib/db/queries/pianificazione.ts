@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { calcolaScadenza } from "@/lib/scadenze/calcola";
+import { getScopeVisibilita } from "@/lib/auth/scope";
 import type {
   PianoVisite,
   StatoSlot,
@@ -137,11 +138,27 @@ interface SlotRow {
  */
 export async function getPianificazione(): Promise<SlotPianificazione[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("visite_pianificate").select(
+
+  // Sprint 16: filtro applicativo per ruolo. Il tecnico vede solo gli slot a lui
+  // assegnati o collegati a una sua visita (coerente con la futura RLS su
+  // visite_pianificate); admin/planner vedono tutto.
+  const scope = await getScopeVisibilita();
+  if (scope.mode === "none") return [];
+
+  let q = supabase.from("visite_pianificate").select(
     `id, piano_id, sede_id, numero_visita, ciclo_numero, data_suggerita, data_pianificata, stato, visita_id,
      tecnico_assegnato_id, tecnico_personalizzato,
      sedi ( nome, cliente_id, clienti ( ragione_sociale ) )`
   );
+
+  if (scope.mode === "tecnico") {
+    const visitaList = Array.from(scope.visitaIds);
+    const orParts = [`tecnico_assegnato_id.eq.${scope.userId}`];
+    if (visitaList.length > 0) orParts.push(`visita_id.in.(${visitaList.join(",")})`);
+    q = q.or(orParts.join(","));
+  }
+
+  const { data, error } = await q;
   if (error || !data) return [];
 
   const rows = (data as unknown as SlotRow[]).map((d) => {

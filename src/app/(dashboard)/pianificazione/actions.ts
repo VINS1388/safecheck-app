@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import {
   salvaModificheSlot,
   ripristinaTecnicoDefault,
@@ -10,6 +11,8 @@ import {
 
 export type SetDataResult = { ok: true } | { ok: false; error: string };
 export type GeneraCicloResult = { ok: true; nuovi: number } | { ok: false; error: string };
+
+const NON_AUTORIZZATO = "Non hai i permessi per gestire la pianificazione.";
 
 /**
  * Salva le modifiche inline di uno slot (data e/o tecnico). Solo i campi
@@ -23,6 +26,7 @@ export async function salvaSlotAction(
 ): Promise<SetDataResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  if (!(await canManagePlanning())) return { ok: false, error: NON_AUTORIZZATO };
   try {
     await salvaModificheSlot(slotId, input);
     revalidatePath("/pianificazione");
@@ -36,6 +40,7 @@ export async function salvaSlotAction(
 export async function ripristinaDefaultSlotAction(slotId: string): Promise<SetDataResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  if (!(await canManagePlanning())) return { ok: false, error: NON_AUTORIZZATO };
   try {
     await ripristinaTecnicoDefault(slotId);
     revalidatePath("/pianificazione");
@@ -49,6 +54,7 @@ export async function ripristinaDefaultSlotAction(slotId: string): Promise<SetDa
 export async function generaProssimoCicloAction(pianoId: string): Promise<GeneraCicloResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  if (!(await canManagePlanning())) return { ok: false, error: NON_AUTORIZZATO };
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.rpc("genera_prossimo_ciclo", { p_piano_id: pianoId });

@@ -3,15 +3,19 @@ import {
   getPianiConStato,
   getTecnici,
 } from "@/lib/db/queries/pianificazione";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import PianificazioneClient, { type SlotRiga } from "./PianificazioneClient";
 import PianiContrattuali from "./PianiContrattuali";
 
 export default async function PianificazionePage() {
   const oggi = new Date().toISOString().slice(0, 10);
+  const canManage = await canManagePlanning();
   const [slots, tecnici, piani] = await Promise.all([
     getPianificazione(),
     getTecnici(),
-    getPianiConStato(oggi),
+    // I piani contrattuali sono governance: solo admin/planner. Per il tecnico
+    // non serve caricarli (la sezione non viene renderizzata).
+    canManage ? getPianiConStato(oggi) : Promise.resolve([]),
   ]);
   const tecnicoNome = new Map(tecnici.map((t) => [t.id, t.nomeCompleto]));
 
@@ -51,8 +55,14 @@ export default async function PianificazionePage() {
         </p>
       </div>
 
-      <PianiContrattuali piani={piani} />
-      <PianificazioneClient slots={righe} clientiFiltro={clientiFiltro} tecnici={tecniciOpzioni} oggi={oggi} />
+      {canManage && <PianiContrattuali piani={piani} />}
+      <PianificazioneClient
+        slots={righe}
+        clientiFiltro={clientiFiltro}
+        tecnici={tecniciOpzioni}
+        oggi={oggi}
+        canManage={canManage}
+      />
     </main>
   );
 }

@@ -822,7 +822,7 @@ export type Database = {
     }
     Enums: {
       esito_risposta: "C" | "PC" | "NC" | "NV" | "NA"
-      ruolo_utente: "admin" | "specialist"
+      ruolo_utente: "admin" | "specialist" | "planner"
       stato_verbale: "bozza" | "chiuso" | "sostituito"
       stato_visita:
         | "pianificata"
@@ -958,7 +958,7 @@ export const Constants = {
   public: {
     Enums: {
       esito_risposta: ["C", "PC", "NC", "NV", "NA"],
-      ruolo_utente: ["admin", "specialist"],
+      ruolo_utente: ["admin", "specialist", "planner"],
       stato_verbale: ["bozza", "chiuso", "sostituito"],
       stato_visita: [
         "pianificata",

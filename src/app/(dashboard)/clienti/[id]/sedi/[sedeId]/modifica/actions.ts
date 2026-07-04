@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import { salvaPiano, type EsitoSalvaPiano } from "@/lib/db/queries/pianificazione";
 
 export type SalvaPianoResult =
@@ -22,6 +23,9 @@ export async function salvaPianoAction(
 ): Promise<SalvaPianoResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
+  if (!(await canManagePlanning())) {
+    return { ok: false, error: "Non hai i permessi per gestire il piano visite." };
+  }
 
   if (!input.dataInizioCiclo) {
     return { ok: false, error: "La data di inizio ciclo è obbligatoria." };

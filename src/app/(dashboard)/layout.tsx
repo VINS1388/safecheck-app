@@ -12,6 +12,10 @@ export default async function DashboardLayout({
   if (!user) {
     redirect("/login");
   }
+  // Q4: un utente disattivato perde l'accesso all'app al primo request utile.
+  if (profilo && !profilo.attivo) {
+    redirect("/account-disattivato");
+  }
 
   const nome = profilo?.nome_completo ?? user.email ?? "Utente";
   const ruolo = profilo?.ruolo ?? "specialist";

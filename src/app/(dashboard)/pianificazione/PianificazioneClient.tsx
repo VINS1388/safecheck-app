@@ -30,6 +30,7 @@ interface Props {
   clientiFiltro: { id: string; nome: string }[];
   tecnici: { id: string; nome: string }[];
   oggi: string; // ISO yyyy-mm-dd (data server)
+  canManage: boolean; // admin/planner: può modificare data/tecnico degli slot
 }
 
 type FiltroStato = "tutte" | StatoSlot | "urgenti" | "in_lavorazione";
@@ -68,7 +69,7 @@ function urgenzaDi(s: SlotRiga, oggi: string): Urgenza {
   return differenzaGiorni(eff, oggi) <= 30 ? "vicina" : "ok";
 }
 
-export default function PianificazioneClient({ slots, clientiFiltro, tecnici, oggi }: Props) {
+export default function PianificazioneClient({ slots, clientiFiltro, tecnici, oggi, canManage }: Props) {
   const router = useRouter();
   const [filtroStato, setFiltroStato] = useState<FiltroStato>("tutte");
   const [filtroCliente, setFiltroCliente] = useState("");
@@ -204,7 +205,8 @@ export default function PianificazioneClient({ slots, clientiFiltro, tecnici, og
           {righe.map((s) => {
             const u = urgenzaDi(s, oggi);
             const dataEff = s.dataPianificata ?? s.dataSuggerita;
-            const modificabile = s.stato !== "eseguita";
+            // La modifica di data/tecnico è governance: solo admin/planner.
+            const modificabile = canManage && s.stato !== "eseguita";
             const lavorazione = inLavorazione(s);
             const inEdit = editId === s.id;
             return (
@@ -261,75 +263,67 @@ export default function PianificazioneClient({ slots, clientiFiltro, tecnici, og
                   </div>
                 </div>
 
-                {/* Azioni */}
-                {s.stato === "eseguita" && s.visitaId ? (
-                  <div className="mt-2">
-                    <Link
-                      href={`/visite/${s.visitaId}/checklist`}
-                      className="text-xs font-medium text-[#1e3a5f] hover:underline"
-                    >
-                      Apri verbale →
-                    </Link>
-                  </div>
-                ) : modificabile ? (
-                  inEdit ? (
-                    <div className="mt-3 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                          Data
-                        </label>
-                        <input
-                          type="date"
-                          value={editData}
-                          onChange={(e) => setEditData(e.target.value)}
-                          className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
-                        />
-                        <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                          Tecnico
-                        </label>
-                        <select
-                          value={editTecnico}
-                          onChange={(e) => setEditTecnico(e.target.value)}
-                          className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
-                        >
-                          <option value="">Da assegnare</option>
-                          {tecnici.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.nome}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => salvaSlot(s)}
-                          disabled={salvando}
-                          className="min-h-[38px] rounded-lg bg-[#1e3a5f] px-3 text-xs font-semibold text-white disabled:opacity-50"
-                        >
-                          {salvando ? "…" : "Salva"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={chiudiEdit}
-                          className="min-h-[38px] rounded-lg border border-gray-300 px-3 text-xs text-gray-600"
-                        >
-                          Annulla
-                        </button>
-                        {s.tecnicoPersonalizzato && (
-                          <button
-                            type="button"
-                            onClick={() => ripristinaDefault(s.id)}
-                            disabled={salvando}
-                            className="ml-auto text-xs font-medium text-gray-500 hover:text-[#1e3a5f] hover:underline disabled:opacity-50"
-                          >
-                            Ripristina tecnico predefinito del piano
-                          </button>
-                        )}
-                      </div>
+                {/* Azioni. Modifica data/tecnico = solo admin/planner (modificabile).
+                    I link di navigazione (Apri verbale/bozza) restano per tutti. */}
+                {modificabile && inEdit ? (
+                  <div className="mt-3 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Data
+                      </label>
+                      <input
+                        type="date"
+                        value={editData}
+                        onChange={(e) => setEditData(e.target.value)}
+                        className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
+                      />
+                      <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Tecnico
+                      </label>
+                      <select
+                        value={editTecnico}
+                        onChange={(e) => setEditTecnico(e.target.value)}
+                        className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
+                      >
+                        <option value="">Da assegnare</option>
+                        {tecnici.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.nome}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  ) : (
-                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => salvaSlot(s)}
+                        disabled={salvando}
+                        className="min-h-[38px] rounded-lg bg-[#1e3a5f] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        {salvando ? "…" : "Salva"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={chiudiEdit}
+                        className="min-h-[38px] rounded-lg border border-gray-300 px-3 text-xs text-gray-600"
+                      >
+                        Annulla
+                      </button>
+                      {s.tecnicoPersonalizzato && (
+                        <button
+                          type="button"
+                          onClick={() => ripristinaDefault(s.id)}
+                          disabled={salvando}
+                          className="ml-auto text-xs font-medium text-gray-500 hover:text-[#1e3a5f] hover:underline disabled:opacity-50"
+                        >
+                          Ripristina tecnico predefinito del piano
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-wrap items-center gap-4">
+                    {modificabile && (
                       <button
                         type="button"
                         onClick={() => apriEdit(s)}
@@ -337,17 +331,25 @@ export default function PianificazioneClient({ slots, clientiFiltro, tecnici, og
                       >
                         {s.dataPianificata ? "Modifica data / tecnico" : "Pianifica (data / tecnico)"}
                       </button>
-                      {lavorazione && s.visitaId && (
-                        <Link
-                          href={`/visite/${s.visitaId}/avvia`}
-                          className="text-xs font-medium text-blue-700 hover:underline"
-                        >
-                          Apri bozza →
-                        </Link>
-                      )}
-                    </div>
-                  )
-                ) : null}
+                    )}
+                    {s.stato === "eseguita" && s.visitaId && (
+                      <Link
+                        href={`/visite/${s.visitaId}/checklist`}
+                        className="text-xs font-medium text-[#1e3a5f] hover:underline"
+                      >
+                        Apri verbale →
+                      </Link>
+                    )}
+                    {lavorazione && s.visitaId && (
+                      <Link
+                        href={`/visite/${s.visitaId}/avvia`}
+                        className="text-xs font-medium text-blue-700 hover:underline"
+                      >
+                        Apri bozza →
+                      </Link>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}

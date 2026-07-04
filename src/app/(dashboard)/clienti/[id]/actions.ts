@@ -3,7 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import { aggiornaCliente, eliminaCliente } from "@/lib/db/queries/clienti";
+
+const ERR_PERM = encodeURIComponent("Non hai i permessi per questa operazione.");
 
 function opt(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? "").trim();
@@ -14,6 +17,7 @@ function opt(formData: FormData, key: string): string | null {
 export async function aggiornaClienteAction(id: string, formData: FormData) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${id}?err=${ERR_PERM}`);
 
   const ragione_sociale = String(formData.get("ragione_sociale") ?? "").trim();
   const citta = String(formData.get("citta") ?? "").trim();
@@ -43,6 +47,7 @@ export async function aggiornaClienteAction(id: string, formData: FormData) {
 export async function eliminaClienteAction(id: string) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${id}?err=${ERR_PERM}`);
 
   const esito = await eliminaCliente(id);
   if (!esito.ok) {

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import { creaCliente } from "@/lib/db/queries/clienti";
 
 function opt(formData: FormData, key: string): string | null {
@@ -14,6 +15,9 @@ export async function creaClienteAction(formData: FormData) {
   const { user } = await getCurrentUser();
   if (!user) {
     redirect("/login");
+  }
+  if (!(await canManagePlanning())) {
+    throw new Error("Non hai i permessi per creare clienti.");
   }
 
   const ragione_sociale = String(formData.get("ragione_sociale") ?? "").trim();
