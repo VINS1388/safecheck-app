@@ -26,14 +26,12 @@ export interface SlotRiga {
 }
 
 interface Props {
-  slots: SlotRiga[];
-  clientiFiltro: { id: string; nome: string }[];
+  slots: SlotRiga[]; // già filtrati server-side dalla FilterBar (URL)
   tecnici: { id: string; nome: string }[];
   oggi: string; // ISO yyyy-mm-dd (data server)
   canManage: boolean; // admin/planner: può modificare data/tecnico degli slot
 }
 
-type FiltroStato = "tutte" | StatoSlot | "urgenti" | "in_lavorazione";
 type Urgenza = "scaduta" | "vicina" | "ok" | "neutro";
 
 const BADGE_STATO: Record<StatoSlot, string> = {
@@ -69,10 +67,8 @@ function urgenzaDi(s: SlotRiga, oggi: string): Urgenza {
   return differenzaGiorni(eff, oggi) <= 30 ? "vicina" : "ok";
 }
 
-export default function PianificazioneClient({ slots, clientiFiltro, tecnici, oggi, canManage }: Props) {
+export default function PianificazioneClient({ slots, tecnici, oggi, canManage }: Props) {
   const router = useRouter();
-  const [filtroStato, setFiltroStato] = useState<FiltroStato>("tutte");
-  const [filtroCliente, setFiltroCliente] = useState("");
   const [asc, setAsc] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState("");
@@ -81,24 +77,15 @@ export default function PianificazioneClient({ slots, clientiFiltro, tecnici, og
   const [salvando, setSalvando] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
 
+  // I filtri (cliente/sede/tecnico/stato/periodo) sono applicati server-side dalla
+  // FilterBar (URL): qui resta solo l'ordinamento per data effettiva.
   const righe = useMemo(() => {
-    let r = slots.filter((s) => {
-      if (filtroCliente && s.clienteId !== filtroCliente) return false;
-      if (filtroStato === "tutte") return true;
-      if (filtroStato === "urgenti") {
-        const u = urgenzaDi(s, oggi);
-        return u === "scaduta" || u === "vicina";
-      }
-      if (filtroStato === "in_lavorazione") return inLavorazione(s);
-      return s.stato === filtroStato;
-    });
-    r = [...r].sort((a, b) => {
+    return [...slots].sort((a, b) => {
       const da = a.dataPianificata ?? a.dataSuggerita;
       const db = b.dataPianificata ?? b.dataSuggerita;
       return asc ? da.localeCompare(db) : db.localeCompare(da);
     });
-    return r;
-  }, [slots, filtroStato, filtroCliente, asc, oggi]);
+  }, [slots, asc]);
 
   function apriEdit(s: SlotRiga) {
     setEditId(s.id);
@@ -159,29 +146,10 @@ export default function PianificazioneClient({ slots, clientiFiltro, tecnici, og
     }
   }
 
-  const SELECT =
-    "min-h-[40px] rounded-lg border border-gray-300 px-3 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
-
   return (
     <div>
-      {/* Filtri */}
+      {/* Ordinamento (i filtri sono nella FilterBar sopra) */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <select value={filtroStato} onChange={(e) => setFiltroStato(e.target.value as FiltroStato)} className={SELECT}>
-          <option value="tutte">Tutte</option>
-          <option value="da_pianificare">Da pianificare</option>
-          <option value="pianificata">Pianificate</option>
-          <option value="in_lavorazione">In lavorazione</option>
-          <option value="eseguita">Eseguite</option>
-          <option value="urgenti">In scadenza / scadute</option>
-        </select>
-        <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={SELECT}>
-          <option value="">Tutti i clienti</option>
-          {clientiFiltro.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           onClick={() => setAsc((v) => !v)}

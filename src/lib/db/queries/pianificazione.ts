@@ -180,6 +180,49 @@ export async function getPianificazione(): Promise<SlotPianificazione[]> {
   return rows;
 }
 
+/** Opzioni di filtro per la pianificazione (Sprint 16.5). Tutte facoltative. */
+export interface FiltriPianificazione {
+  clienteId?: string;
+  sedeId?: string;
+  tecnicoId?: string;
+  stato?: string; // da_assegnare | da_pianificare | pianificata | in_lavorazione | eseguita
+  dataDa?: string; // ISO, su data effettiva (pianificata ?? suggerita)
+  dataA?: string;
+}
+
+/**
+ * Pianificazione filtrata (Sprint 16.5). Riusa `getPianificazione` (già scopata
+ * per ruolo dalla RLS/scope) e narrowa in memoria — il dataset è piccolo
+ * (single-tenant). Stati derivati: `da_assegnare` (senza tecnico, non eseguito) e
+ * `in_lavorazione` (bozza collegata, non eseguito). Il periodo è sulla data
+ * effettiva; l'assenza di dataDa/dataA = nessuna restrizione (default "sempre").
+ */
+export async function getPianificazioneFiltrata(
+  f: FiltriPianificazione
+): Promise<SlotPianificazione[]> {
+  const slots = await getPianificazione();
+  return slots.filter((s) => {
+    if (f.clienteId && s.clienteId !== f.clienteId) return false;
+    if (f.sedeId && s.sedeId !== f.sedeId) return false;
+    if (f.tecnicoId && s.tecnicoId !== f.tecnicoId) return false;
+    if (f.stato) {
+      if (f.stato === "da_assegnare") {
+        if (!(s.tecnicoId == null && s.stato !== "eseguita")) return false;
+      } else if (f.stato === "in_lavorazione") {
+        if (!(s.visitaId != null && s.stato !== "eseguita")) return false;
+      } else if (s.stato !== f.stato) {
+        return false;
+      }
+    }
+    if (f.dataDa || f.dataA) {
+      const eff = s.dataPianificata ?? s.dataSuggerita;
+      if (f.dataDa && eff < f.dataDa) return false;
+      if (f.dataA && eff > f.dataA) return false;
+    }
+    return true;
+  });
+}
+
 /** Slot proponibile alla creazione di una nuova visita (ciclo corrente, ancora libero). */
 export interface SlotProponibile {
   id: string;

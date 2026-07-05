@@ -1,23 +1,60 @@
 import {
-  getPianificazione,
+  getPianificazioneFiltrata,
   getPianiConStato,
   getTecnici,
 } from "@/lib/db/queries/pianificazione";
 import { canManagePlanning } from "@/lib/auth/rbac";
+import { parseFiltri, rangePeriodo } from "@/lib/filters";
+import {
+  getClientiOpzioni,
+  getSediOpzioni,
+  getTecniciOpzioni,
+} from "@/lib/server/filtri-opzioni";
+import FilterBar, { type FilterConfig } from "@/components/filters/FilterBar";
 import PianificazioneClient, { type SlotRiga } from "./PianificazioneClient";
 import PianiContrattuali from "./PianiContrattuali";
 
-export default async function PianificazionePage() {
+const STATI_SLOT = [
+  { value: "da_assegnare", label: "Da assegnare" },
+  { value: "da_pianificare", label: "Da pianificare" },
+  { value: "pianificata", label: "Pianificate" },
+  { value: "in_lavorazione", label: "In lavorazione" },
+  { value: "eseguita", label: "Eseguite" },
+];
+
+export default async function PianificazionePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const oggi = new Date().toISOString().slice(0, 10);
+  // Pagina forward-looking: default periodo = "sempre" (non nascondere gli slot
+  // futuri con una finestra "ultimi 30 giorni").
+  const sp = await searchParams;
+  const filtri = parseFiltri(sp, "sempre");
+  const range = rangePeriodo(filtri, oggi);
   const canManage = await canManagePlanning();
-  const [slots, tecnici, piani] = await Promise.all([
-    getPianificazione(),
-    getTecnici(),
-    // I piani contrattuali sono governance: solo admin/planner. Per il tecnico
-    // non serve caricarli (la sezione non viene renderizzata).
+
+  const [slots, clienti, sedi, tecniciRoster, tecniciRLS, piani] = await Promise.all([
+    getPianificazioneFiltrata({
+      clienteId: filtri.cliente,
+      sedeId: filtri.sede,
+      tecnicoId: canManage ? filtri.tecnico : undefined,
+      stato: filtri.stato,
+      dataDa: range.da,
+      dataA: range.a,
+    }),
+    getClientiOpzioni(),
+    getSediOpzioni(),
+    getTecniciOpzioni(), // roster completo (admin/planner), [] per lo specialist
+    getTecnici(), // via RLS: dà il "sé stesso" allo specialist per il nome del proprio slot
     canManage ? getPianiConStato(oggi) : Promise.resolve([]),
   ]);
-  const tecnicoNome = new Map(tecnici.map((t) => [t.id, t.nomeCompleto]));
+
+  // Nome tecnico: unione roster (admin/planner) + RLS (self per lo specialist).
+  const tecnicoNome = new Map<string, string>();
+  for (const t of tecniciRLS) tecnicoNome.set(t.id, t.nomeCompleto);
+  for (const t of tecniciRoster) tecnicoNome.set(t.value, t.label);
 
   const righe: SlotRiga[] = slots.map((s) => ({
     id: s.id,
@@ -35,15 +72,13 @@ export default async function PianificazionePage() {
     tecnicoPersonalizzato: s.tecnicoPersonalizzato,
   }));
 
-  const tecniciOpzioni = tecnici.map((t) => ({ id: t.id, nome: t.nomeCompleto }));
-
-  // Clienti unici (per il filtro), ordinati per nome.
-  const clientiFiltro = Array.from(
-    new Map(slots.map((s) => [s.clienteId, s.clienteNome])).entries()
-  )
-    .filter(([id]) => id)
-    .map(([id, nome]) => ({ id, nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome));
+  const config: FilterConfig = {
+    cliente: true,
+    sede: true,
+    tecnico: true, // reso solo se canManage (admin/planner)
+    stato: STATI_SLOT,
+    periodo: true,
+  };
 
   return (
     <main className="mx-auto max-w-4xl">
@@ -56,10 +91,20 @@ export default async function PianificazionePage() {
       </div>
 
       {canManage && <PianiContrattuali piani={piani} />}
+
+      <FilterBar
+        config={config}
+        filtri={filtri}
+        clienti={clienti}
+        sedi={sedi}
+        tecnici={tecniciRoster}
+        mostraTecnico={canManage}
+        periodoDefault="sempre"
+      />
+
       <PianificazioneClient
         slots={righe}
-        clientiFiltro={clientiFiltro}
-        tecnici={tecniciOpzioni}
+        tecnici={tecniciRoster.map((t) => ({ id: t.value, nome: t.label }))}
         oggi={oggi}
         canManage={canManage}
       />

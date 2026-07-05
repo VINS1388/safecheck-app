@@ -275,6 +275,85 @@ export async function getVisiteUtente(): Promise<VisitaRiepilogo[]> {
   return (data as unknown as VisitaConRelazioni[]).map(mapRiepilogo);
 }
 
+/** Opzioni di filtro per l'elenco visite (Sprint 16.5). Tutte facoltative. */
+export interface FiltriVisite {
+  clienteId?: string;
+  sedeId?: string;
+  tecnicoId?: string;
+  stato?: string; // "bozza" | "chiuso" | "sostituito" (UI stato_verbale)
+  dataDa?: string; // ISO, inclusivo, su data_visita
+  dataA?: string; // ISO, inclusivo, su data_visita
+  soloConNC?: boolean; // criticità: almeno una risposta NC
+}
+
+/**
+ * Insieme delle visite (fra gli id dati) con ALMENO UNA risposta NC — standard
+ * (`risposte.valore='NC'`) o per-impresa SEZ-08 (`risposte_imprese_appalto.esito
+ * ='NC'`). Query relazionali su colonna indicizzata (FK visita_id), nessun JSONB.
+ * La RLS scoperà comunque le righe; gli id passati sono già autorizzati.
+ */
+async function visiteConNC(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: string[]
+): Promise<Set<string>> {
+  const set = new Set<string>();
+  if (ids.length === 0) return set;
+
+  const { data: std } = await supabase
+    .from("risposte")
+    .select("visita_id")
+    .eq("valore", "NC")
+    .in("visita_id", ids);
+  for (const r of (std ?? []) as { visita_id: string }[]) set.add(r.visita_id);
+
+  const { data: imp } = await supabase
+    .from("risposte_imprese_appalto")
+    .select("imprese_appalto!inner ( visita_id )")
+    .eq("esito", "NC")
+    .in("imprese_appalto.visita_id", ids);
+  for (const r of (imp ?? []) as unknown as {
+    imprese_appalto: { visita_id: string } | { visita_id: string }[] | null;
+  }[]) {
+    const ia = Array.isArray(r.imprese_appalto) ? r.imprese_appalto[0] : r.imprese_appalto;
+    if (ia?.visita_id) set.add(ia.visita_id);
+  }
+  return set;
+}
+
+/**
+ * Elenco visite accessibili all'utente, filtrato (Sprint 16.5). La RLS scopa già
+ * le righe per ruolo (specialist → proprie); i filtri NARROWANO, non allargano.
+ * Lo stato UI mappa su `numero_verbale`/`stato_verbale` (stessa logica di
+ * `statoVerbaleUI`). La criticità è un post-filtro sugli id già autorizzati.
+ */
+export async function getVisiteFiltrate(f: FiltriVisite): Promise<VisitaRiepilogo[]> {
+  const supabase = await createClient();
+
+  let q = supabase
+    .from("visite")
+    .select(`id, stato, stato_verbale, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome )`);
+
+  if (f.clienteId) q = q.eq("cliente_id", f.clienteId);
+  if (f.sedeId) q = q.eq("sede_id", f.sedeId);
+  if (f.tecnicoId) q = q.eq("specialist_id", f.tecnicoId);
+  if (f.dataDa) q = q.gte("data_visita", f.dataDa);
+  if (f.dataA) q = q.lte("data_visita", f.dataA);
+  if (f.stato === "bozza") q = q.is("numero_verbale", null);
+  else if (f.stato === "chiuso") q = q.eq("stato_verbale", "chiuso");
+  else if (f.stato === "sostituito") q = q.eq("stato_verbale", "sostituito");
+
+  const { data, error } = await q.order("data_visita", { ascending: false });
+  if (error || !data) return [];
+
+  let rows = (data as unknown as VisitaConRelazioni[]).map(mapRiepilogo);
+
+  if (f.soloConNC) {
+    const nc = await visiteConNC(supabase, rows.map((r) => r.id));
+    rows = rows.filter((r) => nc.has(r.id));
+  }
+  return rows;
+}
+
 /**
  * Elimina una visita SOLO se è una bozza (guard server-side). I record figli
  * (risposte, imprese, verbali_pdf, punteggi) cascadano; gli slot pianificati

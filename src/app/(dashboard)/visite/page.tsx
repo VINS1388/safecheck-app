@@ -1,11 +1,63 @@
-import { getVisiteUtente, type VisitaRiepilogo } from "@/lib/db/queries/visite";
+import { getVisiteFiltrate, type VisitaRiepilogo } from "@/lib/db/queries/visite";
+import { parseFiltri, rangePeriodo } from "@/lib/filters";
+import { canManagePlanning } from "@/lib/auth/rbac";
+import {
+  getClientiOpzioni,
+  getSediOpzioni,
+  getTecniciOpzioni,
+} from "@/lib/server/filtri-opzioni";
 import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
+import FilterBar, { type FilterConfig } from "@/components/filters/FilterBar";
 import AzioniVerbale from "./AzioniVerbale";
 
-export default async function VisitePage() {
-  const visite = await getVisiteUtente();
+const STATI_VERBALE = [
+  { value: "bozza", label: "Bozza" },
+  { value: "chiuso", label: "Chiuso" },
+  { value: "sostituito", label: "Sostituito" },
+];
+
+export default async function VisitePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  // Pagina di sezione (archivio): default di periodo = "sempre" (nessuna finestra
+  // implicita che nasconderebbe verbali/bozze più vecchi di 30gg).
+  const filtri = parseFiltri(sp, "sempre");
+  const oggi = new Date().toISOString().slice(0, 10);
+  const range = rangePeriodo(filtri, oggi);
+  const mostraTecnico = await canManagePlanning();
+
+  const [visite, clienti, sedi, tecnici] = await Promise.all([
+    getVisiteFiltrate({
+      clienteId: filtri.cliente,
+      sedeId: filtri.sede,
+      tecnicoId: mostraTecnico ? filtri.tecnico : undefined, // dimensione off per lo specialist
+      stato: filtri.stato,
+      dataDa: range.da,
+      dataA: range.a,
+      soloConNC: filtri.criticita,
+    }),
+    getClientiOpzioni(),
+    getSediOpzioni(),
+    mostraTecnico ? getTecniciOpzioni() : Promise.resolve([]),
+  ]);
+
+  const config: FilterConfig = {
+    cliente: true,
+    sede: true,
+    tecnico: true, // reso solo se mostraTecnico (admin/planner)
+    stato: STATI_VERBALE,
+    periodo: true,
+    tipologia: [{ value: "sicurezza", label: "Sicurezza" }], // un solo valore → nascosto
+    criticita: true,
+  };
+
+  const conFiltri =
+    !!filtri.cliente || !!filtri.sede || !!filtri.tecnico || !!filtri.stato || !!filtri.criticita || filtri.periodo !== "sempre";
 
   return (
     <main>
@@ -14,13 +66,27 @@ export default async function VisitePage() {
         <p className="text-sm text-gray-600">Sopralluoghi di sicurezza in corso e conclusi.</p>
       </div>
 
+      <FilterBar
+        config={config}
+        filtri={filtri}
+        clienti={clienti}
+        sedi={sedi}
+        tecnici={tecnici}
+        mostraTecnico={mostraTecnico}
+        periodoDefault="sempre"
+      />
+
       {visite.length === 0 ? (
-        <EmptyState
-          titolo="Nessuna visita"
-          descrizione="Apri la scheda di un cliente e avvia una nuova visita da una delle sue sedi."
-          ctaHref="/clienti"
-          ctaLabel="Vai ai clienti"
-        />
+        conFiltri ? (
+          <EmptyState titolo="Nessun risultato" descrizione="Nessuna visita corrisponde ai filtri selezionati." compatto />
+        ) : (
+          <EmptyState
+            titolo="Nessuna visita"
+            descrizione="Apri la scheda di un cliente e avvia una nuova visita da una delle sue sedi."
+            ctaHref="/clienti"
+            ctaLabel="Vai ai clienti"
+          />
+        )
       ) : (
         <>
           {/* Card stack — mobile */}
