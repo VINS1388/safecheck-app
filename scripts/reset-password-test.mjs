@@ -1,3 +1,7 @@
+// ⚠️ SOSTITUITO (Sprint 16 · Checkpoint 2): il reset password è ora nell'area
+//    /organizzazione (src/lib/server/organizzazione.ts → resetPassword). Questo
+//    script CLI resta solo come utilità operativa/di test; non è più il percorso
+//    primario. Non cancellato in questo sprint (decisione rimandata).
 /**
  * Reset password di account di TEST (dati fittizi) e verifica login.
  *

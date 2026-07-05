@@ -5,13 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const NAV_BASE = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/clienti", label: "Clienti" },
   { href: "/visite", label: "Visite" },
   { href: "/pianificazione", label: "Pianificazione" },
   { href: "/scadenze", label: "Scadenze" },
 ];
+// L'area /organizzazione è admin-only: il link compare solo per gli admin (il
+// layout server-side reindirizza comunque i non-admin che digitano l'URL).
+const NAV_ADMIN = [{ href: "/organizzazione", label: "Organizzazione" }];
 
 interface Props {
   nome: string;
@@ -29,11 +32,13 @@ export default function DashboardShell({
   const [aperto, setAperto] = useState(false);
   const pathname = usePathname();
 
+  const nav = ruolo === "admin" ? [...NAV_BASE, ...NAV_ADMIN] : NAV_BASE;
+
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
   const navLinks = (onClick?: () => void) =>
-    NAV.map((item) => (
+    nav.map((item) => (
       <Link
         key={item.href}
         href={item.href}

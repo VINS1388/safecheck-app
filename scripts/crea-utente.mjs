@@ -1,3 +1,7 @@
+// ⚠️ SOSTITUITO (Sprint 16 · Checkpoint 2): la creazione utenti è ora nell'area
+//    /organizzazione (src/lib/server/organizzazione.ts → creaUtente). Questo
+//    script CLI resta solo come utilità operativa/di emergenza; non è più il
+//    percorso primario. Non cancellato in questo sprint (decisione rimandata).
 /**
  * Crea (o allinea) un utente SafeCheck su Supabase, con parametri da CLI.
  *
