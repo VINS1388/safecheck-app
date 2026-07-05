@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getModuloSicurezzaId } from "@/lib/db/queries/moduli";
+import { snapshotDaStrutturaMaster } from "@/lib/checklist/haccpSnapshot";
 import type { TemplateSnapshot } from "@/types";
 import type { Tables } from "@/types/database.types";
 
@@ -114,6 +115,21 @@ export async function creaVisita(input: {
   // SOLO sicurezza (mai un HACCP), coerente col DEFAULT DB — flusso invariato oggi.
   const moduloId = input.moduloId ?? (await getModuloSicurezzaId());
 
+  // Enforcement server-side (Sprint HACCP 2, C1): il modulo dev'essere attivo a
+  // catalogo E sulla sede. getModuliSelezionabiliVisita resta solo guida UI; la
+  // sicurezza è QUI. Il gate è SECURITY DEFINER (vede moduli_sede anche se la sede
+  // non è ancora raggiungibile via RLS dal tecnico alla prima visita).
+  const { data: consentito, error: errGate } = await supabase.rpc(
+    "can_creare_visita_con_modulo",
+    { p_sede_id: input.sedeId, p_modulo_id: moduloId }
+  );
+  if (errGate) {
+    throw new Error(`Verifica modulo non riuscita: ${errGate.message}`);
+  }
+  if (!consentito) {
+    throw new Error("Il modulo selezionato non è attivo su questa sede.");
+  }
+
   // Template master attivo DEL MODULO (versione più recente).
   const { data: master, error: errMaster } = await supabase
     .from("template_master")
@@ -132,6 +148,10 @@ export async function creaVisita(input: {
 
   const oggi = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
+  // Snapshot immutabile in forma APPLICATIVA: per il template HACCP canonico si
+  // trasforma (Sprint HACCP 2); per sicurezza resta invariato. Punto unico.
+  const snapshot = snapshotDaStrutturaMaster(master.struttura_json);
+
   const { data, error } = await supabase
     .from("visite")
     .insert({
@@ -142,7 +162,7 @@ export async function creaVisita(input: {
       data_visita: oggi,
       stato: "bozza",
       template_master_id: master.id,
-      template_snapshot: master.struttura_json,
+      template_snapshot: snapshot,
     })
     .select("id")
     .single();

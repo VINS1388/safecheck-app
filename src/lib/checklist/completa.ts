@@ -30,6 +30,67 @@ export function richiedeTesto(valore: EsitoRisposta | null | undefined): boolean
   return valore === "PC" || valore === "NC" || valore === "NV" || valore === "NA";
 }
 
+// ── Modello obblighi TEMPLATE-DRIVEN (Sprint HACCP 2, C2) ──────────────────
+//
+// Il verbale sicurezza e quello HACCP hanno modelli di obbligo diversi e
+// NON vanno mescolati:
+//  - sicurezza: PC/NC → azione_correttiva; NV/NA → motivazione. → rispostaCompleta
+//  - HACCP:     PC/NC → osservazione (osservazione_evidenza); NV → motivazione;
+//               C/NA → facoltativa; nessuna azione_correttiva (fuori scope H2).
+// Il modello HACCP è guidato dalla mappa `obbligo_osservazione` presente nello
+// snapshot del template, così un cambio di policy non tocca il codice.
+
+/** Livelli di obbligo espressi da `obbligo_osservazione` nel template HACCP. */
+export type LivelloObbligo = "facoltativa" | "obbligatoria" | "motivazione_obbligatoria";
+
+/** Mappa esito → livello di obbligo (dallo snapshot: struttura_json.obbligo_osservazione). */
+export type ObblighiOsservazione = Partial<Record<EsitoRisposta, LivelloObbligo>>;
+
+/** I campi testo di una risposta, distinti per ruolo semantico. */
+export interface CampiRisposta {
+  osservazioneEvidenza?: string | null; // ciò che si è osservato (HACCP: PC/NC)
+  motivazione?: string | null; // = osservazioni (HACCP: NV; sicurezza: NV/NA)
+}
+
+/**
+ * Quale campo testo è OBBLIGATORIO per un esito, dato il modello HACCP.
+ * `"obbligatoria"` → osservazione_evidenza; `"motivazione_obbligatoria"` →
+ * motivazione; `"facoltativa"`/assente → nessuno.
+ */
+export type CampoRichiesto = "osservazione_evidenza" | "motivazione" | null;
+export function campoRichiestoHaccp(
+  valore: EsitoRisposta | null | undefined,
+  obblighi: ObblighiOsservazione
+): CampoRichiesto {
+  if (valore == null) return null;
+  const liv = obblighi[valore] ?? "facoltativa";
+  if (liv === "obbligatoria") return "osservazione_evidenza";
+  if (liv === "motivazione_obbligatoria") return "motivazione";
+  return null;
+}
+
+/**
+ * Completezza di una risposta HACCP: esito presente + eventuale campo testo
+ * imposto da `obbligo_osservazione`. Fonte di verità unica per progresso,
+ * riepilogo e blocco chiusura del verbale HACCP (parallela a `rispostaCompleta`
+ * per il verbale sicurezza — le due NON vanno unificate).
+ */
+export function rispostaCompletaHaccp(
+  valore: EsitoRisposta | null | undefined,
+  campi: CampiRisposta,
+  obblighi: ObblighiOsservazione
+): boolean {
+  const richiesto = campoRichiestoHaccp(valore, obblighi);
+  if (valore == null) return false;
+  if (richiesto === "osservazione_evidenza") {
+    return (campi.osservazioneEvidenza ?? "").trim().length > 0;
+  }
+  if (richiesto === "motivazione") {
+    return (campi.motivazione ?? "").trim().length > 0;
+  }
+  return true; // facoltativa (C/NA) → completa col solo esito
+}
+
 // ── Logica condizionale a livello di SEZIONE (Sprint 9, SEZ-08) ────────────
 //
 // Alcune sezioni hanno una "domanda filtro" (`domanda_filtro`): se la risposta

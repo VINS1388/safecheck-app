@@ -1,7 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import type { DomandaTemplate, EsitoRisposta } from "@/types";
+import type { DomandaTemplate, EsitoRisposta, GuidaValutativa } from "@/types";
+import {
+  campoRichiestoHaccp,
+  type ObblighiOsservazione,
+} from "@/lib/checklist/completa";
 import AutoResizeTextarea from "./AutoResizeTextarea";
 
 const VALORI: EsitoRisposta[] = ["C", "PC", "NC", "NV", "NA"];
@@ -48,6 +53,18 @@ export interface DomandaCardProps {
   calcoloAutomatico?: boolean;
   calcoloEtichetta?: string;
   onDeselezionaEsito?: () => void;
+  // ── Modalità HACCP (Sprint HACCP 2, C2) — tutte opzionali, default = sicurezza:
+  // Etichette risposte dal template (es. PC="Migliorabile"). Le chiavi assenti
+  // ricadono sulle etichette di default. Se prop assente → default sicurezza.
+  etichette?: Partial<Record<EsitoRisposta, string>>;
+  // Guida valutativa a tre livelli, consultabile in campo (tap/expand). Mai nel PDF.
+  guida?: GuidaValutativa;
+  // Criterio di applicabilità (domande con `applicabilita` nel template).
+  criterioApplicabilita?: string | null;
+  // Mappa obbligo_osservazione: la SUA presenza attiva il modello HACCP degli
+  // obblighi (PC/NC → osservazione; NV → motivazione; C/NA → facoltativa; niente
+  // azione correttiva). Assente → modello sicurezza (azione per NC/PC).
+  obblighi?: ObblighiOsservazione;
   onValore: (valore: EsitoRisposta) => void;
   onAzione: (testo: string) => void;
   onOsservazioneEvidenza: (testo: string) => void;
@@ -68,13 +85,36 @@ export default function DomandaCard({
   calcoloAutomatico = false,
   calcoloEtichetta,
   onDeselezionaEsito,
+  etichette,
+  guida,
+  criterioApplicabilita,
+  obblighi,
   onValore,
   onAzione,
   onOsservazioneEvidenza,
   onMotivazione,
 }: DomandaCardProps) {
-  const mostraAzione = valore === "NC" || valore === "PC";
-  const mostraMotivazione = valore === "NV" || valore === "NA";
+  const [guidaAperta, setGuidaAperta] = useState(false);
+  const etich = etichette ? { ...ETICHETTE, ...etichette } : ETICHETTE;
+
+  // Modello obblighi: HACCP se `obblighi` è presente, altrimenti sicurezza.
+  const modelloHaccp = obblighi != null;
+  const richiestoHaccp = modelloHaccp ? campoRichiestoHaccp(valore, obblighi!) : null;
+
+  // Sicurezza: azione per NC/PC, motivazione per NV/NA.
+  const mostraAzione = !modelloHaccp && (valore === "NC" || valore === "PC");
+  // HACCP: osservazione per C/PC/NC (obbligatoria su PC/NC), motivazione per NV/NA.
+  const mostraOsservazioneHaccp =
+    modelloHaccp && (valore === "C" || valore === "PC" || valore === "NC");
+  const osservazioneObbligatoria = richiestoHaccp === "osservazione_evidenza";
+  // Motivazione: sicurezza NV/NA (sempre obbligatoria) | HACCP NV/NA (obbligatoria
+  // solo se il template la impone, es. NV).
+  const mostraMotivazione =
+    (!modelloHaccp && (valore === "NV" || valore === "NA")) ||
+    (modelloHaccp && (valore === "NV" || valore === "NA"));
+  const motivazioneObbligatoria = !modelloHaccp || richiestoHaccp === "motivazione";
+  const guidaDisponibile =
+    !!guida && !!(guida.conforme || guida.migliorabile || guida.non_conforme);
   // Campo testo libero opzionale (es. elenco imprese appaltatrici di SEZ-08):
   // persistito su `osservazione_evidenza`, sempre visibile, indipendente dall'esito.
   const campoTestoLibero = domanda.campo_extra?.tipo === "testo_libero";
@@ -89,6 +129,12 @@ export default function DomandaCard({
         domanda.gated_by && "ml-3 border-l-4 border-l-amber-400 bg-amber-50/30"
       )}
     >
+      {/* Titolo breve HACCP (heading), quando presente nel template. */}
+      {domanda.titolo?.trim() && (
+        <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-[#1e3a5f]">
+          {domanda.titolo}
+        </p>
+      )}
       <p className="text-sm font-medium leading-snug text-gray-900">
         {domanda.testo}
         {domanda.obbligatoria && (
@@ -111,6 +157,52 @@ export default function DomandaCard({
         <p className="mt-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
           {domanda.nota_ui}
         </p>
+      )}
+
+      {/* Criterio di applicabilità HACCP (domande con `applicabilita`): guida il
+          tecnico a valutare se rispondere o marcare NA. */}
+      {criterioApplicabilita?.trim() && (
+        <p className="mt-1.5 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+          <span className="font-semibold">Applicabilità:</span> {criterioApplicabilita}
+        </p>
+      )}
+
+      {/* Guida valutativa HACCP a tre livelli, consultabile in campo (tap/expand).
+          Puramente di supporto: MAI stampata integralmente nel PDF. */}
+      {guidaDisponibile && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setGuidaAperta((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[#1e3a5f] hover:underline"
+            aria-expanded={guidaAperta}
+          >
+            <span aria-hidden>{guidaAperta ? "▾" : "▸"}</span>
+            Guida alla valutazione
+          </button>
+          {guidaAperta && (
+            <dl className="mt-1.5 space-y-1.5 rounded-md bg-slate-50 px-3 py-2 text-xs leading-relaxed">
+              {guida?.conforme && (
+                <div>
+                  <dt className="inline font-semibold text-green-700">Conforme — </dt>
+                  <dd className="inline text-slate-700">{guida.conforme}</dd>
+                </div>
+              )}
+              {guida?.migliorabile && (
+                <div>
+                  <dt className="inline font-semibold text-amber-700">Migliorabile — </dt>
+                  <dd className="inline text-slate-700">{guida.migliorabile}</dd>
+                </div>
+              )}
+              {guida?.non_conforme && (
+                <div>
+                  <dt className="inline font-semibold text-red-700">Non Conforme — </dt>
+                  <dd className="inline text-slate-700">{guida.non_conforme}</dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -152,7 +244,7 @@ export default function DomandaCard({
                   selezionato ? "text-white/90" : "text-gray-500"
                 )}
               >
-                {ETICHETTE[v]}
+                {etich[v]}
               </span>
             </button>
           );
@@ -254,10 +346,48 @@ export default function DomandaCard({
         </>
       )}
 
+      {/* HACCP: campo osservazione per C/PC/NC. Obbligatorio su PC/NC (evidenza
+          del rilievo), facoltativo su C. Nessuna azione correttiva in questo sprint. */}
+      {mostraOsservazioneHaccp && (
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-gray-700">
+            Osservazione{" "}
+            {osservazioneObbligatoria ? (
+              <span className="text-red-500" title="Obbligatoria">*</span>
+            ) : (
+              <span className="font-normal text-gray-400">(opzionale)</span>
+            )}
+          </label>
+          <AutoResizeTextarea
+            value={osservazioneEvidenza}
+            onChange={(e) => onOsservazioneEvidenza(e.target.value)}
+            disabled={disabled}
+            minRows={3}
+            placeholder="Descrivi ciò che hai osservato durante il sopralluogo…"
+            className={cn(
+              TEXTAREA_BASE,
+              !osservazioneObbligatoria || osservazioneEvidenza.trim()
+                ? "border-gray-300"
+                : "border-red-300"
+            )}
+          />
+          {osservazioneObbligatoria && !osservazioneEvidenza.trim() && !disabled && (
+            <p className="mt-1 text-xs text-red-500">
+              Campo obbligatorio per chiudere la domanda.
+            </p>
+          )}
+        </div>
+      )}
+
       {mostraMotivazione && (
         <div className="mt-3">
           <label className="block text-xs font-medium text-gray-700">
-            Motivazione <span className="text-red-500" title="Obbligatoria">*</span>
+            Motivazione{" "}
+            {motivazioneObbligatoria ? (
+              <span className="text-red-500" title="Obbligatoria">*</span>
+            ) : (
+              <span className="font-normal text-gray-400">(opzionale)</span>
+            )}
           </label>
           <AutoResizeTextarea
             value={osservazioni}
@@ -271,10 +401,12 @@ export default function DomandaCard({
             }
             className={cn(
               TEXTAREA_BASE,
-              osservazioni.trim() ? "border-gray-300" : "border-red-300"
+              !motivazioneObbligatoria || osservazioni.trim()
+                ? "border-gray-300"
+                : "border-red-300"
             )}
           />
-          {!osservazioni.trim() && !disabled && (
+          {motivazioneObbligatoria && !osservazioni.trim() && !disabled && (
             <p className="mt-1 text-xs text-red-500">
               Campo obbligatorio per chiudere la domanda.
             </p>

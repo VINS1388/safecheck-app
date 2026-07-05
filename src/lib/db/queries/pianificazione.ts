@@ -591,6 +591,19 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ esito: Esito
 
   if (!esistente) {
     const moduloId = input.moduloId ?? (await getModuloSicurezzaId());
+
+    // Enforcement server-side (Sprint HACCP 2, C1): un piano HACCP è creabile solo
+    // su una sede con quel modulo attivo (idem sicurezza). Guida UI a monte, ma la
+    // sicurezza è QUI. Gate SECURITY DEFINER, coerente con creaVisita.
+    const { data: consentito, error: errGate } = await supabase.rpc(
+      "can_creare_visita_con_modulo",
+      { p_sede_id: input.sedeId, p_modulo_id: moduloId }
+    );
+    if (errGate) throw new Error(`Verifica modulo non riuscita: ${errGate.message}`);
+    if (!consentito) {
+      throw new Error("Il modulo selezionato non è attivo su questa sede: piano non creabile.");
+    }
+
     const { data: piano, error } = await supabase
       .from("piani_visite")
       .insert({

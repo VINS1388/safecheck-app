@@ -111,8 +111,8 @@ async function collegaSlotAs(uid, slotId, visitaId, creatorId) {
 
 async function creaVisita(sedeId, clienteId, specialistId, stato = "bozza") {
   const r = await c.query(
-    `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, template_snapshot, data_visita, stato)
-     VALUES ($1,$2,$3,'{}'::jsonb, CURRENT_DATE, $4) RETURNING id`,
+    `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, modulo_id, template_snapshot, data_visita, stato)
+     VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','{}'::jsonb, CURRENT_DATE, $4) RETURNING id`,
     [sedeId, clienteId, specialistId, stato]);
   return r.rows[0].id;
 }
@@ -211,8 +211,8 @@ try {
   // Gap che ha bucato il test 025 e il primo test visivo: .insert().select() e
   // .update().select() passano ANCHE dalla policy SELECT sulla riga del RETURNING.
   const mkVisita = (uid) => asUser(uid, () => sp(async () =>
-    (await c.query(`INSERT INTO public.visite (sede_id, cliente_id, specialist_id, template_snapshot, data_visita, stato)
-       VALUES ($1,$2,$3,'{}'::jsonb, CURRENT_DATE, 'bozza') RETURNING id`, [S, C, uid])).rows[0].id));
+    (await c.query(`INSERT INTO public.visite (sede_id, cliente_id, specialist_id, modulo_id, template_snapshot, data_visita, stato)
+       VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','{}'::jsonb, CURRENT_DATE, 'bozza') RETURNING id`, [S, C, uid])).rows[0].id));
   const insT = await mkVisita(T);
   check("RETURNING: tecnico crea la propria visita (INSERT...RETURNING)", insT.ok, insT.ok ? "" : insT.error?.code);
   check("RETURNING: admin crea visita (INSERT...RETURNING)", (await mkVisita(A)).ok);
@@ -345,7 +345,7 @@ try {
 
     if (insSede.ok) {
       insPiano = await asUser(O, () => sp(async () =>
-        (await c.query(`INSERT INTO public.piani_visite (sede_id, data_inizio_ciclo, visite_anno) VALUES ($1, CURRENT_DATE, 2) RETURNING id`, [insSede.value])).rowCount));
+        (await c.query(`INSERT INTO public.piani_visite (sede_id, data_inizio_ciclo, visite_anno, modulo_id) VALUES ($1, CURRENT_DATE, 2, 'a0000000-0000-4000-8000-000000000001') RETURNING id`, [insSede.value])).rowCount));
       check("account reale promosso admin: INSERT piani_visite OK", insPiano.ok && insPiano.value === 1);
     }
     check("account reale promosso admin: UPDATE clienti OK", (await asUser(O, () => sp(async () =>

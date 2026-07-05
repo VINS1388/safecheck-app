@@ -67,8 +67,8 @@ try {
   // Verbale sorgente CHIUSO, snapshot v8. D-03-002 (diretta e composito) = 'C',
   // D-03-003 = 'NA' manuale con una data stale (non deve mai essere ricalcolata).
   const src = await one(
-    `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, stato_verbale, numero_verbale, template_snapshot)
-     VALUES ($1,$2,$3,$4,'verbale_generato','chiuso',$5,$6::jsonb) RETURNING id`,
+    `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, stato_verbale, numero_verbale, template_snapshot)
+     VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001',$4,'verbale_generato','chiuso',$5,$6::jsonb) RETURNING id`,
     [sede.id, sede.cliente_id, utente.id, ORIG_SOPRALLUOGO, "SC-9999-" + Math.floor(Math.random() * 1e6), JSON.stringify(snapshot)]
   );
   const ce = JSON.stringify({ data_verifica: DATA_VERIFICA });

@@ -63,7 +63,7 @@ try {
 
   // ── SCENARIO A — creazione piano 2 visite/anno ────────────────────────────
   console.log("── A — creazione piano (2 visite/anno) ──");
-  const piano = await one(`INSERT INTO piani_visite (sede_id, data_inizio_ciclo, visite_anno, tecnico_assegnato_id) VALUES ($1,'2026-03-01',2,$2) RETURNING id`, [sede.id, utente.id]);
+  const piano = await one(`INSERT INTO piani_visite (sede_id, data_inizio_ciclo, visite_anno, tecnico_assegnato_id, modulo_id) VALUES ($1,'2026-03-01',2,$2,'a0000000-0000-4000-8000-000000000001') RETURNING id`, [sede.id, utente.id]);
   await one(`SELECT genera_slot_ciclo($1,$2,1,'2026-03-01',2) n`, [piano.id, sede.id]);
   let slots = await all(`SELECT numero_visita nv, data_suggerita::text d, stato FROM visite_pianificate WHERE piano_id=$1 ORDER BY numero_visita`, [piano.id]);
   check("2 slot @2026-03-01 e 2026-09-01, da_pianificare", slots.length === 2 && slots[0].d === "2026-03-01" && slots[1].d === "2026-09-01" && slots.every(s => s.stato === "da_pianificare"));
@@ -71,8 +71,8 @@ try {
   // ── SCENARIO B — aggancio automatico (sede CON piano) ─────────────────────
   console.log("\n── B — aggancio automatico alla chiusura (sede con piano) ──");
   const visita1 = await one(
-    `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, stato_verbale, template_snapshot)
-     VALUES ($1,$2,$3,'2026-03-05','verbale_generato','chiuso','{}'::jsonb) RETURNING id`,
+    `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, stato_verbale, template_snapshot)
+     VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','2026-03-05','verbale_generato','chiuso','{}'::jsonb) RETURNING id`,
     [sede.id, sede.cliente_id, utente.id]
   );
   const agg = await aggancia(sede.id, visita1.id);
@@ -84,8 +84,8 @@ try {
   // ── SCENARIO C — aggancio con sede SENZA piano (nessun side-effect) ───────
   console.log("\n── C — chiusura sede SENZA piano (nessun errore, nessun aggancio) ──");
   const visita2 = await one(
-    `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, stato_verbale, template_snapshot)
-     VALUES ($1,$2,$3,'2026-04-01','verbale_generato','chiuso','{}'::jsonb) RETURNING id`,
+    `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, stato_verbale, template_snapshot)
+     VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','2026-04-01','verbale_generato','chiuso','{}'::jsonb) RETURNING id`,
     [sedeNoPiano.id, sede.cliente_id, utente.id]
   );
   const aggNone = await aggancia(sedeNoPiano.id, visita2.id);

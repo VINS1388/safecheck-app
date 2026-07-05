@@ -79,8 +79,8 @@ try {
 
   async function nuovaBozza(specialist = owner, stato = "bozza", numero = null) {
     const r = await c.query(
-      `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, template_snapshot, data_visita, stato, numero_verbale, stato_verbale)
-       VALUES ($1,$2,$3,'{}'::jsonb, CURRENT_DATE, $4, $5, $6) RETURNING id`,
+      `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, modulo_id, template_snapshot, data_visita, stato, numero_verbale, stato_verbale)
+       VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','{}'::jsonb, CURRENT_DATE, $4, $5, $6) RETURNING id`,
       [sede.id, sede.cliente_id, specialist, stato, numero, numero ? "chiuso" : null]
     );
     return r.rows[0].id;

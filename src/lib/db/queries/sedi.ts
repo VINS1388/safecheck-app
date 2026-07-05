@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database.types";
+import { getModuloSicurezzaId } from "@/lib/db/queries/moduli";
 
 export type Sede = Tables<"sedi">;
 
@@ -48,6 +49,18 @@ export async function creaSede(dati: CreaSedeInput): Promise<string> {
 
   if (error || !data) {
     throw new Error(`Errore creazione sede: ${error?.message ?? "sconosciuto"}`);
+  }
+
+  // Ogni sede nasce con il modulo base 'sicurezza' attivo (stato di fatto,
+  // coerente col seed della migration 028 per le sedi preesistenti). Senza questa
+  // riga il gate server-side can_creare_visita_con_modulo bloccherebbe anche il
+  // flusso sicurezza sulle sedi create dopo la 029 (DEFAULT rimosso).
+  const sicurezzaId = await getModuloSicurezzaId();
+  const { error: errMs } = await supabase
+    .from("moduli_sede")
+    .insert({ sede_id: data.id, modulo_id: sicurezzaId, attivo: true });
+  if (errMs) {
+    throw new Error(`Sede creata ma attivazione modulo base non riuscita: ${errMs.message}`);
   }
 
   return data.id;

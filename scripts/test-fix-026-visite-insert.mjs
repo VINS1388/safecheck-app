@@ -33,8 +33,9 @@ try{
   const PL=(await c.query(`SELECT id FROM public.utenti WHERE email='planner.test@safecheck.local'`)).rows[0].id;
   const p=(await c.query(`SELECT pv.id piano_id, pv.sede_id, s.cliente_id, pv.ciclo_corrente FROM public.piani_visite pv JOIN public.sedi s ON s.id=pv.sede_id LIMIT 1`)).rows[0];
   const m=(await c.query(`SELECT id FROM public.template_master WHERE attivo=true ORDER BY versione DESC LIMIT 1`)).rows[0].id;
-  const cols=`(cliente_id, sede_id, specialist_id, data_visita, stato, template_master_id, template_snapshot)`;
-  const vals=`($1,$2,$3,CURRENT_DATE,'bozza',$4,'{}'::jsonb)`;
+  // modulo_id ora OBBLIGATORIO (migration 029: DEFAULT rimosso). Sicurezza esplicito.
+  const cols=`(cliente_id, sede_id, specialist_id, modulo_id, data_visita, stato, template_master_id, template_snapshot)`;
+  const vals=`($1,$2,$3,'a0000000-0000-4000-8000-000000000001',CURRENT_DATE,'bozza',$4,'{}'::jsonb)`;
   const mk=(uid)=>asUser(uid,()=>sp(()=>c.query(`INSERT INTO public.visite ${cols} VALUES ${vals} RETURNING id`,[p.cliente_id,p.sede_id,uid,m])));
 
   // 1) IL BUG: tecnico crea la propria visita (INSERT...RETURNING)

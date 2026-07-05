@@ -112,7 +112,7 @@ try {
 
   // visita su sede A → blocco eliminazione A + blocco eliminazione cliente
   await c.query(
-    `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, template_snapshot) VALUES ($1,$2,$3,'2026-06-30','bozza','{}'::jsonb)`,
+    `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, template_snapshot) VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','2026-06-30','bozza','{}'::jsonb)`,
     [sedeA.id, cli.id, utente.id]
   );
   const visiteA = Number((await one(`SELECT count(*)::int n FROM visite WHERE sede_id=$1`, [sedeA.id])).n);

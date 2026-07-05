@@ -54,8 +54,8 @@ try {
   // lo scenario B, 3 imprese SEZ-08 con risposte miste.
   async function creaSorgente(conImprese) {
     const src = await one(
-      `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, stato_verbale, numero_verbale, note_conclusive, template_snapshot)
-       VALUES ($1,$2,$3,'2026-01-15','verbale_generato','chiuso',$4,'Note finali di test.','{"sezioni":[]}'::jsonb) RETURNING id`,
+      `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, stato_verbale, numero_verbale, note_conclusive, template_snapshot)
+       VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','2026-01-15','verbale_generato','chiuso',$4,'Note finali di test.','{"sezioni":[]}'::jsonb) RETURNING id`,
       [sede.id, sede.cliente_id, utente.id, "SC-9999-" + Math.floor(Math.random() * 1e6)]
     );
     await c.query(
@@ -164,7 +164,7 @@ try {
   console.log("\n── SCENARIO F — Blocco Duplica/Sostitutivo su bozza e sostituito ──");
   {
     const bozza = await one(
-      `INSERT INTO visite (sede_id, cliente_id, specialist_id, data_visita, stato, template_snapshot) VALUES ($1,$2,$3,'2026-06-30','bozza','{}'::jsonb) RETURNING stato_verbale, sostituito_da`,
+      `INSERT INTO visite (sede_id, cliente_id, specialist_id, modulo_id, data_visita, stato, template_snapshot) VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','2026-06-30','bozza','{}'::jsonb) RETURNING stato_verbale, sostituito_da`,
       [sede.id, sede.cliente_id, utente.id]
     );
     check("bozza: canDuplica=false, canSostitutivo=false → 403", !canDuplica(bozza) && !canSostitutivo(bozza));

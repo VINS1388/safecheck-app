@@ -16,12 +16,14 @@ import { SEZIONE_NOMINATIVI, SEP_FORMAZIONE, idRispostaFormazione } from "@/type
 import type { RispostaSalvata } from "@/lib/db/queries/risposte";
 import {
   rispostaCompleta,
+  rispostaCompletaHaccp,
   sezioneCollassata,
   domandaAttiva,
   domandaGateAttiva,
   completezzaImpreseSezioneOtto,
   completezzaFormazione,
 } from "@/lib/checklist/completa";
+import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
 import {
   istanzeFormazione,
   genericheFormazione,
@@ -244,6 +246,22 @@ export default function ChecklistClient({
 }: Props) {
   const sezioni = [...template.sezioni].sort((a, b) => a.ordine - b.ordine);
   const chiusa = stato !== "bozza";
+
+  // ── Modalità HACCP (Sprint HACCP 2, C2): rilevata dallo snapshot. Attiva
+  // etichette/guida/criterio/obblighi sulle card e il modello di completezza
+  // HACCP (PC/NC → osservazione, NV → motivazione). Snapshot sicurezza: tutto false.
+  const modelloHaccp = isSnapshotHaccp(template);
+  const etichetteHaccp = template.etichette;
+  const obblighiHaccp = template.obbligo_osservazione ?? {};
+  /** Completezza di una risposta standard secondo il modello attivo. */
+  const entryCompleta = (e: Entry | undefined): boolean =>
+    modelloHaccp
+      ? rispostaCompletaHaccp(
+          e?.valore ?? null,
+          { osservazioneEvidenza: e?.osservazioneEvidenza, motivazione: e?.osservazioni },
+          obblighiHaccp
+        )
+      : rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
   // Sezione formazione per-nominativo (SEZ-03), se presente nello snapshot.
   const sezFormazione = sezioni.find((s) => s.formazione_per_nominativo) ?? null;
 
@@ -746,10 +764,7 @@ export default function ChecklistClient({
     );
     // Una domanda conta come "data" solo se completa (esito + eventuale
     // campo testo obbligatorio: azione correttiva per NC/PC, motivazione per NV/NA).
-    const date = attive.filter((d) => {
-      const e = risposte[d.id];
-      return rispostaCompleta(e?.valore ?? null, e?.azione, e?.osservazioni);
-    }).length;
+    const date = attive.filter((d) => entryCompleta(risposte[d.id])).length;
     return {
       date,
       totale: attive.length,
@@ -885,6 +900,12 @@ export default function ChecklistClient({
                   azioneCorrettiva={entry?.azione ?? ""}
                   osservazioneEvidenza={entry?.osservazioneEvidenza ?? ""}
                   osservazioni={entry?.osservazioni ?? ""}
+                  // HACCP: etichette/guida/criterio/obblighi dallo snapshot (undefined
+                  // su sicurezza → comportamento invariato).
+                  etichette={modelloHaccp ? etichetteHaccp : undefined}
+                  guida={modelloHaccp ? d.guida : undefined}
+                  criterioApplicabilita={modelloHaccp ? d.applicabilita : undefined}
+                  obblighi={modelloHaccp ? obblighiHaccp : undefined}
                   mostraDataVerifica={d.campo_data === true}
                   dataVerifica={entry?.dataVerifica ?? ""}
                   onDataVerifica={(t) =>

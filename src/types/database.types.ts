@@ -819,6 +819,10 @@ export type Database = {
         Returns: Database["public"]["Enums"]["ruolo_utente"]
       }
       is_admin: { Args: never; Returns: boolean }
+      can_creare_visita_con_modulo: {
+        Args: { p_sede_id: string; p_modulo_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       esito_risposta: "C" | "PC" | "NC" | "NV" | "NA"

@@ -58,8 +58,8 @@ function check(name, ok, extra = "") {
 // Helper: replica creaVisita a livello SQL (bozza minima).
 async function creaVisita(sedeId, clienteId, specialistId) {
   const r = await c.query(
-    `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, template_snapshot, data_visita, stato)
-     VALUES ($1,$2,$3,'{}'::jsonb, CURRENT_DATE, 'bozza') RETURNING id`,
+    `INSERT INTO public.visite (sede_id, cliente_id, specialist_id, modulo_id, template_snapshot, data_visita, stato)
+     VALUES ($1,$2,$3,'a0000000-0000-4000-8000-000000000001','{}'::jsonb, CURRENT_DATE, 'bozza') RETURNING id`,
     [sedeId, clienteId, specialistId]
   );
   return r.rows[0].id;

@@ -15,11 +15,24 @@ export interface CampoExtraTemplate {
   multiplo: boolean;
 }
 
+/** Guida valutativa HACCP a tre livelli (dal template). Solo UI, MAI nel PDF. */
+export interface GuidaValutativa {
+  conforme?: string;
+  migliorabile?: string;
+  non_conforme?: string;
+}
+
 /** Una domanda all'interno dello snapshot del template. */
 export interface DomandaTemplate {
   id: string; // es. "D-01-001"
   testo: string;
+  titolo?: string; // titolo breve HACCP (es. "Manuale di autocontrollo"), heading in UI
   descrizione?: string; // testo esplicativo normativo, VISIBILE in UI sotto la domanda; non stampato nel PDF
+  // HACCP (Sprint HACCP 2): guida valutativa a 3 livelli (solo UI), criterio di
+  // applicabilità (domande con `applicabilita`), categoria della domanda.
+  guida?: GuidaValutativa;
+  applicabilita?: string | null;
+  categoria?: string;
   ordine: number;
   obbligatoria: boolean;
   tipo_risposta: string; // "conformita_5" | "qualita_4"
@@ -62,6 +75,7 @@ export interface SezioneTemplate {
   id: string; // es. "SEZ-01"
   nome: string;
   descrizione?: string;
+  categoria_prevalente?: string; // HACCP: categoria prevalente della sezione
   ordine: number;
   // Id della "domanda filtro" della sezione (logica condizionale a livello di
   // sezione). Se presente e la sua risposta è NA (nessun caso applicabile), le
@@ -120,6 +134,15 @@ export interface TemplateSnapshot {
   nome: string;
   versione: number;
   origine?: unknown;
+  // HACCP (Sprint HACCP 2): marker e configurazione trasportati dal template
+  // canonico nella forma applicativa. Assenti sugli snapshot sicurezza.
+  modulo?: string; // es. "haccp_generico"
+  tipo_scoring?: string; // es. "haccp_media_sezione" → attiva il flusso HACCP in UI
+  etichette?: Partial<Record<EsitoRisposta, string>>; // es. PC = "Migliorabile"
+  obbligo_osservazione?: Partial<
+    Record<EsitoRisposta, "facoltativa" | "obbligatoria" | "motivazione_obbligatoria">
+  >;
+  intestazione_extra?: string[]; // campi extra dell'intestazione visita HACCP
   sezioni: SezioneTemplate[];
 }
 
