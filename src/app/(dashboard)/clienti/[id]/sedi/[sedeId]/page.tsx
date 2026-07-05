@@ -4,13 +4,16 @@ import { getClienteById } from "@/lib/db/queries/clienti";
 import { getSedeById } from "@/lib/db/queries/sedi";
 import { getVisiteBySede } from "@/lib/db/queries/visite";
 import { getPianoBySede, getSlotByPianoCiclo, getTecnici, getSlotProponibiliBySede } from "@/lib/db/queries/pianificazione";
+import { getModuliSede } from "@/lib/db/queries/moduli";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManagePlanning } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import { ETICHETTE_STATO_SLOT } from "@/types";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import { nuovaVisitaAction } from "./nuova-visita/actions";
 import NuovaVisitaConSlot from "./NuovaVisitaConSlot";
+import ServiziAttivi from "./ServiziAttivi";
 import DuplicaUltimo from "./DuplicaUltimo";
 
 export default async function SedeDettaglioPage({
@@ -23,13 +26,15 @@ export default async function SedeDettaglioPage({
   const sede = await getSedeById(sedeId);
   if (!sede || sede.cliente_id !== id) notFound();
 
-  const [cliente, visite, piano, tecnici, slotProponibili, { user }] = await Promise.all([
+  const [cliente, visite, piano, tecnici, slotProponibili, { user }, moduliSede, canManage] = await Promise.all([
     getClienteById(id),
     getVisiteBySede(sedeId),
     getPianoBySede(sedeId),
     getTecnici(),
     getSlotProponibiliBySede(sedeId),
     getCurrentUser(),
+    getModuliSede(sedeId),
+    canManagePlanning(),
   ]);
   const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
   const prossimoSlot = slots.find((s) => s.stato !== "eseguita") ?? null;
@@ -111,6 +116,9 @@ export default async function SedeDettaglioPage({
           </Link>
         </div>
       </div>
+
+      {/* Servizi attivi (moduli) — toggle admin/planner, sola lettura tecnico */}
+      <ServiziAttivi clienteId={id} sedeId={sedeId} moduli={moduliSede} canManage={canManage} />
 
       {/* Piano visite (se configurato) */}
       {piano && (

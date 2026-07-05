@@ -6,6 +6,7 @@ import {
   getSediOpzioni,
   getTecniciOpzioni,
 } from "@/lib/server/filtri-opzioni";
+import { getModuliAttivabili } from "@/lib/db/queries/moduli";
 import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
@@ -31,11 +32,12 @@ export default async function VisitePage({
   const range = rangePeriodo(filtri, oggi);
   const mostraTecnico = await canManagePlanning();
 
-  const [visite, clienti, sedi, tecnici] = await Promise.all([
+  const [visite, clienti, sedi, tecnici, moduli] = await Promise.all([
     getVisiteFiltrate({
       clienteId: filtri.cliente,
       sedeId: filtri.sede,
       tecnicoId: mostraTecnico ? filtri.tecnico : undefined, // dimensione off per lo specialist
+      moduloId: filtri.tipologia, // tipologia = modulo (auto-nascosta con un solo modulo)
       stato: filtri.stato,
       dataDa: range.da,
       dataA: range.a,
@@ -44,6 +46,7 @@ export default async function VisitePage({
     getClientiOpzioni(),
     getSediOpzioni(),
     mostraTecnico ? getTecniciOpzioni() : Promise.resolve([]),
+    getModuliAttivabili(),
   ]);
 
   const config: FilterConfig = {
@@ -52,7 +55,9 @@ export default async function VisitePage({
     tecnico: true, // reso solo se mostraTecnico (admin/planner)
     stato: STATI_VERBALE,
     periodo: true,
-    tipologia: [{ value: "sicurezza", label: "Sicurezza" }], // un solo valore → nascosto
+    // Tipologia = modulo: opzioni dai moduli attivabili. Con un solo modulo la
+    // FilterBar auto-nasconde la dimensione (mostraTipologia = length > 1).
+    tipologia: moduli.map((m) => ({ value: m.id, label: m.nomeBreve })),
     criticita: true,
   };
 

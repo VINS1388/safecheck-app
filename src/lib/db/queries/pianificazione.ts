@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { calcolaScadenza } from "@/lib/scadenze/calcola";
 import { getScopeVisibilita } from "@/lib/auth/scope";
+import { getModuloSicurezzaId } from "@/lib/db/queries/moduli";
 import type {
   PianoVisite,
   StatoSlot,
@@ -365,6 +366,20 @@ export async function collegaSlot(
 ): Promise<boolean> {
   const supabase = await createClient();
 
+  // Sprint HACCP 1 — coerenza di modulo: la visita deve appartenere allo stesso
+  // modulo del piano dello slot. Con un solo modulo è sempre coerente; a H2
+  // impedisce di agganciare una visita HACCP a uno slot di un piano sicurezza.
+  const [{ data: slotRow }, { data: vis }] = await Promise.all([
+    supabase.from("visite_pianificate").select("piani_visite!inner ( modulo_id )").eq("id", slotId).maybeSingle(),
+    supabase.from("visite").select("modulo_id").eq("id", visitaId).maybeSingle(),
+  ]);
+  const piano = first(
+    (slotRow as { piani_visite: { modulo_id: string } | { modulo_id: string }[] | null } | null)?.piani_visite
+  );
+  if (piano && vis && piano.modulo_id !== (vis as { modulo_id: string }).modulo_id) {
+    return false; // modulo incoerente: non collegare
+  }
+
   // 1) Slot "Da assegnare" → presa in carico esplicita del creatore.
   const { data: preso, error: errPreso } = await supabase
     .from("visite_pianificate")
@@ -550,6 +565,7 @@ export interface SalvaPianoInput {
   dataInizioCiclo: string;
   visiteAnno: number;
   tecnicoAssegnatoId: string | null;
+  moduloId?: string; // Sprint HACCP 1: default 'sicurezza' (un solo modulo oggi)
 }
 
 /** Esito del salvataggio piano — guida il messaggio in UI e la conferma di ricalcolo. */
@@ -574,6 +590,7 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ esito: Esito
   const esistente = await getPianoBySede(input.sedeId);
 
   if (!esistente) {
+    const moduloId = input.moduloId ?? (await getModuloSicurezzaId());
     const { data: piano, error } = await supabase
       .from("piani_visite")
       .insert({
@@ -581,6 +598,7 @@ export async function salvaPiano(input: SalvaPianoInput): Promise<{ esito: Esito
         data_inizio_ciclo: input.dataInizioCiclo,
         visite_anno: input.visiteAnno,
         tecnico_assegnato_id: input.tecnicoAssegnatoId,
+        modulo_id: moduloId,
       })
       .select("id, ciclo_corrente")
       .single();

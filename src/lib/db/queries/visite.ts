@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getModuloSicurezzaId } from "@/lib/db/queries/moduli";
 import type { TemplateSnapshot } from "@/types";
 import type { Tables } from "@/types/database.types";
 
@@ -105,21 +106,27 @@ export async function creaVisita(input: {
   clienteId: string;
   sedeId: string;
   specialistId: string;
+  moduloId?: string; // Sprint HACCP 1: se assente → default 'sicurezza' (continuità)
 }): Promise<string> {
   const supabase = await createClient();
 
-  // Template master attivo (versione più recente).
+  // Modulo: dal caller (selettore) oppure default 'sicurezza'. Il default vale
+  // SOLO sicurezza (mai un HACCP), coerente col DEFAULT DB — flusso invariato oggi.
+  const moduloId = input.moduloId ?? (await getModuloSicurezzaId());
+
+  // Template master attivo DEL MODULO (versione più recente).
   const { data: master, error: errMaster } = await supabase
     .from("template_master")
     .select("id, struttura_json")
     .eq("attivo", true)
+    .eq("modulo_id", moduloId)
     .order("versione", { ascending: false })
     .limit(1)
     .single();
 
   if (errMaster || !master) {
     throw new Error(
-      `Impossibile risolvere il template master attivo: ${errMaster?.message ?? "nessun template"}`
+      `Impossibile risolvere il template master attivo per il modulo: ${errMaster?.message ?? "nessun template"}`
     );
   }
 
@@ -131,6 +138,7 @@ export async function creaVisita(input: {
       cliente_id: input.clienteId,
       sede_id: input.sedeId,
       specialist_id: input.specialistId,
+      modulo_id: moduloId,
       data_visita: oggi,
       stato: "bozza",
       template_master_id: master.id,
@@ -280,6 +288,7 @@ export interface FiltriVisite {
   clienteId?: string;
   sedeId?: string;
   tecnicoId?: string;
+  moduloId?: string; // tipologia (Sprint HACCP 1): narrowing opzionale per modulo
   stato?: string; // "bozza" | "chiuso" | "sostituito" (UI stato_verbale)
   dataDa?: string; // ISO, inclusivo, su data_visita
   dataA?: string; // ISO, inclusivo, su data_visita
@@ -336,6 +345,7 @@ export async function getVisiteFiltrate(f: FiltriVisite): Promise<VisitaRiepilog
   if (f.clienteId) q = q.eq("cliente_id", f.clienteId);
   if (f.sedeId) q = q.eq("sede_id", f.sedeId);
   if (f.tecnicoId) q = q.eq("specialist_id", f.tecnicoId);
+  if (f.moduloId) q = q.eq("modulo_id", f.moduloId);
   if (f.dataDa) q = q.gte("data_visita", f.dataDa);
   if (f.dataA) q = q.lte("data_visita", f.dataA);
   if (f.stato === "bozza") q = q.is("numero_verbale", null);
