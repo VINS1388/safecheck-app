@@ -39,12 +39,18 @@ export default function NuovaVisitaConSlot({ clienteId, sedeId, slots, currentUs
     }
     setCreando(true);
     setErrore(null);
-    const res = await creaVisitaConSlotAction(clienteId, sedeId, scelta);
-    if (res.ok) {
-      router.push(`/visite/${res.visitaId}/avvia`);
-    } else {
-      setCreando(false);
+    try {
+      const res = await creaVisitaConSlotAction(clienteId, sedeId, scelta);
+      if (res.ok) {
+        router.push(`/visite/${res.visitaId}/avvia`);
+        return; // resta in stato "Creazione…" durante la navigazione
+      }
       setErrore(res.error);
+      setCreando(false);
+    } catch {
+      // Un errore lato server (es. RLS) non deve lasciare il pulsante appeso.
+      setErrore("Errore imprevisto durante la creazione della visita. Riprova.");
+      setCreando(false);
     }
   }
 

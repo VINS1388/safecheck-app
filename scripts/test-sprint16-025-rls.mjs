@@ -20,7 +20,11 @@ import pg from "pg";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REF = "yrgpowaflmcwwspffjip";
-const SQL_025 = readFileSync(join(ROOT, "supabase", "migrations", "025_sprint16_rbac_policies.sql"), "utf8");
+// La 025 è GIÀ applicata in prod (policy per-ruolo + trigger). Questa suite
+// valida lo stato live e vi applica sopra il delta 026 (idempotente), riproducendo
+// esattamente il set di policy di produzione. NON ri-applica la 025 (fallirebbe:
+// le sue policy esistono già).
+const SQL_026 = readFileSync(join(ROOT, "supabase", "migrations", "026_fix_visite_select_returning.sql"), "utf8");
 
 function dbUrl() {
   for (const l of readFileSync(join(ROOT, ".env.local"), "utf8").split(/\r?\n/)) {
@@ -126,19 +130,29 @@ try {
   await c.query("BEGIN");
   await c.query(`SELECT set_config('request.jwt.claims', NULL, true)`);
 
-  // ── Applica la 025 nella transazione ──
-  await c.query(SQL_025);
-  console.log("Migration 025 applicata in transazione.\n");
+  // ── Stato prod (025 già live) + delta 026 nella transazione ──
+  await c.query(SQL_026);
+  console.log("Stato prod (025 live) + migration 026 applicata in transazione.\n");
 
   // ── Attori reali ──
   const A = (await c.query(`SELECT id FROM public.utenti WHERE ruolo='admin' AND attivo=true LIMIT 1`)).rows[0]?.id;
   const PL = (await c.query(`SELECT id FROM public.utenti WHERE email='planner.test@safecheck.local' LIMIT 1`)).rows[0]?.id;
   const T = (await c.query(`SELECT id FROM public.utenti WHERE email='tecnico.test@safecheck.local' LIMIT 1`)).rows[0]?.id;
-  const O = (await c.query(`SELECT id FROM public.utenti WHERE ruolo='specialist' AND attivo=true AND id<>$1 LIMIT 1`, [T])).rows[0]?.id;
+  // "Altro utente" proprietario di una visita che T non deve vedere: un utente
+  // attivo qualsiasi diverso da T (dopo la promozione dell'account reale ad admin,
+  // tecnico.test è l'unico specialist → O può essere admin/planner, è indifferente
+  // ai fini della prova "visita altrui / slot-assegnato-cross-owner").
+  const O = (await c.query(
+    `SELECT id FROM public.utenti WHERE attivo=true AND id NOT IN ($1,$2,$3) LIMIT 1`, [T, A, PL])).rows[0]?.id
+    ?? (await c.query(`SELECT id FROM public.utenti WHERE attivo=true AND id<>$1 LIMIT 1`, [T])).rows[0]?.id;
   if (!A || !PL || !T || !O) {
     console.log(`⚠️  Attori mancanti: admin=${!!A} planner=${!!PL} tecnico=${!!T} altro-tecnico=${!!O}`);
     await c.query("ROLLBACK"); process.exit(1);
   }
+  // O deve fare da "altro tecnico" NON privilegiato: dopo la promozione ad admin
+  // dell'account reale, non esiste un secondo specialist reale → demoto O a
+  // specialist SOLO nella transazione (service role, esente dal trigger; rolled-back).
+  await asService(() => c.query(`UPDATE public.utenti SET ruolo='specialist' WHERE id=$1`, [O]));
 
   // ── Piano/sede/cliente + un secondo cliente NON raggiungibile dal tecnico ──
   const piano = (await c.query(
@@ -192,6 +206,41 @@ try {
     await rowsAs(PL, `DELETE FROM public.visite WHERE id=$1 RETURNING id`, [VDEL]) === 0);
   check("VISITE: il tecnico PUÒ eliminare la propria visita (own)",
     await rowsAs(T, `DELETE FROM public.visite WHERE id=$1 RETURNING id`, [VDEL]) === 1);
+
+  // ══════════════════════ INSERT/UPDATE...RETURNING sotto RLS — flusso reale creaVisita ══════════════════════
+  // Gap che ha bucato il test 025 e il primo test visivo: .insert().select() e
+  // .update().select() passano ANCHE dalla policy SELECT sulla riga del RETURNING.
+  const mkVisita = (uid) => asUser(uid, () => sp(async () =>
+    (await c.query(`INSERT INTO public.visite (sede_id, cliente_id, specialist_id, template_snapshot, data_visita, stato)
+       VALUES ($1,$2,$3,'{}'::jsonb, CURRENT_DATE, 'bozza') RETURNING id`, [S, C, uid])).rows[0].id));
+  const insT = await mkVisita(T);
+  check("RETURNING: tecnico crea la propria visita (INSERT...RETURNING)", insT.ok, insT.ok ? "" : insT.error?.code);
+  check("RETURNING: admin crea visita (INSERT...RETURNING)", (await mkVisita(A)).ok);
+  check("RETURNING: planner crea visita (INSERT...RETURNING)", (await mkVisita(PL)).ok);
+
+  if (insT.ok) {
+    const vNew = insT.value;
+    const slotFree = await creaSlot(P, S, K, 910, null);            // slot "Da assegnare"
+    const link = await collegaSlotAs(T, slotFree, vNew, T);         // UPDATE...RETURNING
+    check("RETURNING: collegaSlot presa in carico (UPDATE...RETURNING) del tecnico", link.linked && link.path === "presa");
+    const apri = await asUser(T, async () => (await c.query(
+      `SELECT v.id, cl.ragione_sociale, s.nome, us.nome_completo
+       FROM public.visite v
+       LEFT JOIN public.clienti cl ON cl.id=v.cliente_id
+       LEFT JOIN public.sedi s ON s.id=v.sede_id
+       LEFT JOIN public.utenti us ON us.id=v.specialist_id
+       WHERE v.id=$1`, [vNew])).rows[0]);
+    check("RETURNING: tecnico APRE la visita (getVisitaById JOIN cliente+sede+utente)",
+      !!apri && !!apri.ragione_sociale && !!apri.nome && !!apri.nome_completo);
+  }
+
+  // Slot assegnato a T su visita di ALTRO utente → T la legge (scope 025 preservato dalla 026).
+  const VO2 = await creaVisita(S, C, O);
+  check("SLOT-READ control: T NON vede la visita altrui PRIMA del link",
+    await rowsAs(T, `SELECT 1 FROM public.visite WHERE id=$1`, [VO2]) === 0);
+  await creaSlot(P, S, K, 911, T, VO2);                            // slot di T collegato a VO2
+  check("SLOT-READ: T LEGGE la visita altrui perché collegata a uno slot a lui assegnato",
+    await rowsAs(T, `SELECT 1 FROM public.visite WHERE id=$1`, [VO2]) === 1);
 
   // ══════════════════════ TABELLE FIGLIE (can_read_visita + own_or_admin) ══════════════════════
   check("RISPOSTE: planner legge le risposte della visita del tecnico", await rowsAs(PL, `SELECT 1 FROM public.risposte WHERE id=$1`, [R]) === 1);
