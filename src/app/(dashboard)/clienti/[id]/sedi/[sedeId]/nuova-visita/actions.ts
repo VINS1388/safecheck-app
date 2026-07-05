@@ -71,7 +71,7 @@ export async function creaVisitaConSlotAction(
 
   const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id });
 
-  const collegato = await collegaSlot(slotId, visitaId);
+  const collegato = await collegaSlot(slotId, visitaId, user.id);
   if (!collegato) {
     // Corsa persa nella finestra tra re-verifica e collegamento: annulla la bozza.
     await eliminaVisitaBozza(visitaId);

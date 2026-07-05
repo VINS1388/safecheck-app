@@ -195,8 +195,17 @@ export interface SlotProponibile {
  * Slot collegabili a una nuova visita per una sede: SOLO ciclo corrente,
  * `visita_id IS NULL`, stato in ('da_pianificare','pianificata'), ordinati per
  * numero_visita. Vuoto se la sede non ha piano o non ha slot liberi.
+ *
+ * Sprint 16 — coerenza APP↔RLS: per il tecnico si mostrano SOLO gli slot suoi o
+ * "Da assegnare" (`tecnico_assegnato_id = self OR IS NULL`) — gli slot Da
+ * assegnare restano visibili nel selettore (presa in carico diretta, P6.1); gli
+ * slot di ALTRI tecnici non sono più proponibili. admin/planner vedono tutto.
+ * Mirror della policy RLS `vp_select_scope`.
  */
 export async function getSlotProponibiliBySede(sedeId: string): Promise<SlotProponibile[]> {
+  const scope = await getScopeVisibilita();
+  if (scope.mode === "none") return [];
+
   const supabase = await createClient();
   const { data: piano } = await supabase
     .from("piani_visite")
@@ -205,14 +214,19 @@ export async function getSlotProponibiliBySede(sedeId: string): Promise<SlotProp
     .maybeSingle();
   if (!piano) return [];
 
-  const { data: slots } = await supabase
+  let q = supabase
     .from("visite_pianificate")
     .select("id, numero_visita, data_suggerita, data_pianificata, tecnico_assegnato_id")
     .eq("piano_id", piano.id)
     .eq("ciclo_numero", piano.ciclo_corrente)
     .is("visita_id", null)
-    .in("stato", ["da_pianificare", "pianificata"])
-    .order("numero_visita", { ascending: true });
+    .in("stato", ["da_pianificare", "pianificata"]);
+
+  if (scope.mode === "tecnico") {
+    q = q.or(`tecnico_assegnato_id.eq.${scope.userId},tecnico_assegnato_id.is.null`);
+  }
+
+  const { data: slots } = await q.order("numero_visita", { ascending: true });
   if (!slots || slots.length === 0) return [];
 
   // Nomi tecnici (anche non attivi, per un'etichetta sempre leggibile).
@@ -286,13 +300,45 @@ export async function slotAncoraProponibile(slotId: string): Promise<boolean> {
 }
 
 /**
- * Collega uno slot a una visita in modo ATOMICO (Opzione A: setta SOLO
- * `visita_id`, lo stato resta invariato — la transizione a 'eseguita' avverrà
- * alla chiusura del verbale). Guard `visita_id IS NULL AND stato <> 'eseguita'`:
- * se 0 righe → un'altra visita ha vinto la corsa. Ritorna true se collegato.
+ * Collega uno slot a una visita in modo ATOMICO (Opzione A: lo stato resta
+ * invariato — la transizione a 'eseguita' avverrà alla chiusura del verbale).
+ * Guard `visita_id IS NULL AND stato <> 'eseguita'`: se 0 righe → un'altra visita
+ * ha vinto la corsa (o lo slot è di un altro tecnico, negato dalla RLS). Ritorna
+ * true se collegato.
+ *
+ * Sprint 16 — PRESA IN CARICO ESPLICITA (P6.1): se lo slot è "Da assegnare"
+ * (`tecnico_assegnato_id IS NULL`) il collegamento assegna nella STESSA UPDATE lo
+ * slot al creatore (`tecnico_assegnato_id = creatorId`, `tecnico_personalizzato =
+ * true`), così non resta "Da assegnare" con una visita collegata (incoerente in
+ * /pianificazione) e l'assegnazione esplicita non verrà sovrascritta da un futuro
+ * cambio del tecnico default del piano. Se lo slot è già assegnato (al creatore o,
+ * per admin, a chiunque) il collegamento tocca SOLO `visita_id`, senza alterare
+ * tecnico/flag. Le due UPDATE sono guardate da `visita_id IS NULL` → nessuna corsa.
  */
-export async function collegaSlot(slotId: string, visitaId: string): Promise<boolean> {
+export async function collegaSlot(
+  slotId: string,
+  visitaId: string,
+  creatorId: string
+): Promise<boolean> {
   const supabase = await createClient();
+
+  // 1) Slot "Da assegnare" → presa in carico esplicita del creatore.
+  const { data: preso, error: errPreso } = await supabase
+    .from("visite_pianificate")
+    .update({
+      visita_id: visitaId,
+      tecnico_assegnato_id: creatorId,
+      tecnico_personalizzato: true,
+    })
+    .eq("id", slotId)
+    .is("visita_id", null)
+    .is("tecnico_assegnato_id", null)
+    .neq("stato", "eseguita")
+    .select("id");
+  if (errPreso) throw new Error(`Errore collegamento slot: ${errPreso.message}`);
+  if ((preso?.length ?? 0) > 0) return true;
+
+  // 2) Slot già assegnato → collega SOLO la visita, tecnico/flag invariati.
   const { data, error } = await supabase
     .from("visite_pianificate")
     .update({ visita_id: visitaId })
