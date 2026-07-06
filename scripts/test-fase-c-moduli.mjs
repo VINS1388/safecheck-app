@@ -46,8 +46,10 @@ try{
   const sede=(await c.query(`SELECT id FROM public.sedi LIMIT 1`)).rows[0].id;
 
   // ── tipologia auto-nascosta ──
+  // Sprint HACCP 2 (029): haccp_generico è ora attivo a catalogo → 2 moduli
+  // attivabili → la tipologia FilterBar diventa VISIBILE (length>1).
   const attivabili=n(await c.query(`SELECT count(*)::int n FROM public.moduli WHERE attivo=true`));
-  ck("getModuliAttivabili = 1 → tipologia FilterBar auto-nascosta (length>1 = false)", attivabili===1, `n=${attivabili}`);
+  ck("getModuliAttivabili = 2 (sicurezza + haccp_generico) → tipologia FilterBar VISIBILE", attivabili===2, `n=${attivabili}`);
 
   // ── selettore modulo NON renderizzato (un solo selezionabile) ──
   const sel=await selezionabili(sede);

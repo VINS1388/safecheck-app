@@ -181,7 +181,7 @@ export default async function ClienteDettaglioPage({
                       Nuova visita
                     </Link>
                   ) : (
-                    <form action={nuovaVisitaAction.bind(null, cliente.id, s.id)}>
+                    <form action={nuovaVisitaAction.bind(null, cliente.id, s.id, undefined)}>
                       <button
                         type="submit"
                         className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"

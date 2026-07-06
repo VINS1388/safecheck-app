@@ -408,6 +408,26 @@ export async function collegaSlot(
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * Modulo del piano cui appartiene lo slot (Sprint HACCP 2, C5): la visita creata
+ * da uno slot deve nascere con QUESTO modulo, così `collegaSlot` è sempre coerente
+ * e il gate `can_creare_visita_con_modulo` valuta il modulo giusto. Null se lo
+ * slot non è raggiungibile/inesistente.
+ */
+export async function getModuloIdSlot(slotId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("visite_pianificate")
+    .select("piani_visite!inner ( modulo_id )")
+    .eq("id", slotId)
+    .maybeSingle();
+  const piano = first(
+    (data as { piani_visite: { modulo_id: string } | { modulo_id: string }[] | null } | null)
+      ?.piani_visite
+  );
+  return piano?.modulo_id ?? null;
+}
+
 /** Verifica che un tecnico esista e sia attivo (validazione server-side del dropdown). */
 async function tecnicoAttivo(tecnicoId: string): Promise<boolean> {
   const supabase = await createClient();

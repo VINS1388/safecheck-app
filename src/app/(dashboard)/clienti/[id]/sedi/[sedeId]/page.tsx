@@ -4,7 +4,7 @@ import { getClienteById } from "@/lib/db/queries/clienti";
 import { getSedeById } from "@/lib/db/queries/sedi";
 import { getVisiteBySede } from "@/lib/db/queries/visite";
 import { getPianoBySede, getSlotByPianoCiclo, getTecnici, getSlotProponibiliBySede } from "@/lib/db/queries/pianificazione";
-import { getModuliSede } from "@/lib/db/queries/moduli";
+import { getModuliSede, getModuliSelezionabiliVisita } from "@/lib/db/queries/moduli";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManagePlanning } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
@@ -26,7 +26,7 @@ export default async function SedeDettaglioPage({
   const sede = await getSedeById(sedeId);
   if (!sede || sede.cliente_id !== id) notFound();
 
-  const [cliente, visite, piano, tecnici, slotProponibili, { user }, moduliSede, canManage] = await Promise.all([
+  const [cliente, visite, piano, tecnici, slotProponibili, { user }, moduliSede, moduliSelezionabili, canManage] = await Promise.all([
     getClienteById(id),
     getVisiteBySede(sedeId),
     getPianoBySede(sedeId),
@@ -34,8 +34,11 @@ export default async function SedeDettaglioPage({
     getSlotProponibiliBySede(sedeId),
     getCurrentUser(),
     getModuliSede(sedeId),
+    getModuliSelezionabiliVisita(sedeId),
     canManagePlanning(),
   ]);
+  // Selettore tipologia solo se la sede offre >1 modulo (Sprint HACCP 2, C5).
+  const moduliOpzioni = moduliSelezionabili.map((m) => ({ id: m.id, nomeBreve: m.nomeBreve }));
   const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
   const prossimoSlot = slots.find((s) => s.stato !== "eseguita") ?? null;
   const tecnicoNome = piano?.tecnicoAssegnatoId
@@ -83,15 +86,19 @@ export default async function SedeDettaglioPage({
       {/* Nuova visita: selettore slot se la sede ha visite pianificate proponibili,
           altrimenti creazione diretta "fuori piano" (zero frizione). */}
       <div className="mb-8 space-y-3">
-        {slotProponibili.length > 0 && user ? (
+        {user && (slotProponibili.length > 0 || moduliOpzioni.length > 1) ? (
+          // Con slot proponibili OPPURE >1 modulo: componente con scelta slot e/o
+          // tipologia (fuori piano). Con >1 modulo e 0 slot mostra solo fuori piano.
           <NuovaVisitaConSlot
             clienteId={id}
             sedeId={sedeId}
             slots={slotProponibili}
             currentUserId={user.id}
+            moduli={moduliOpzioni}
           />
         ) : (
-          <form action={nuovaVisitaAction.bind(null, id, sedeId)}>
+          // Sede mono-modulo senza slot proponibili: creazione diretta (invariato).
+          <form action={nuovaVisitaAction.bind(null, id, sedeId, moduliOpzioni[0]?.id)}>
             <button
               type="submit"
               className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"

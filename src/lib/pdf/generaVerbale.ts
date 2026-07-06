@@ -17,6 +17,8 @@ import { sezioneCollassata, domandaGateAttiva } from "@/lib/checklist/completa";
 import { normalizzaNominativi } from "@/lib/nominativi";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 import { valutaConformitaDaScadenza } from "@/lib/scadenze/calcola";
+import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
+import { analizzaHaccp, type VoceRisposta } from "@/lib/checklist/scoringHaccp";
 
 export interface VerbaleRisposta {
   esito: EsitoRisposta | null;
@@ -47,6 +49,20 @@ export interface VerbaleData {
   risposteImprese?: RispostaImpresaAppalto[];
   // Formazione lavoratori (Sprint 14). Assenti per visite legacy ≤ v8.
   lavoratori?: Lavoratore[];
+  // Intestazione extra HACCP (Sprint HACCP 2, migration 030). Campi che non hanno
+  // colonna dedicata su `visite`. `{}` per i verbali sicurezza.
+  intestazioneExtra?: IntestazioneExtraHaccp;
+}
+
+/** Campi intestazione HACCP salvati in visite.intestazione_extra (JSONB). */
+export interface IntestazioneExtraHaccp {
+  ora_fine?: string | null;
+  funzione_referente?: string | null;
+  attivita_in_corso?: string | null;
+  aree_visitate?: string[] | string | null;
+  aree_non_visitate_motivo?: string | null;
+  flag_rilievi_fotografici?: boolean | null;
+  presa_visione_referente_testuale?: string | null;
 }
 
 const BRAND = "#1e3a5f";
@@ -144,9 +160,15 @@ export async function generaVerbale(dati: VerbaleData): Promise<Buffer> {
       // {id,nome} sia eventuali input legacy a stringhe).
       dati = { ...dati, nominativi: normalizzaNominativi(dati.nominativi) };
 
-      renderCopertina(doc, dati);
-      renderSezioni(doc, dati);
-      renderRilieviConclusivi(doc, dati);
+      // Layout dedicato HACCP (Sprint HACCP 2, C4): tabella punteggi per sezione,
+      // livello complessivo numerico, rilievi. Verbale sicurezza: flusso invariato.
+      if (isSnapshotHaccp(dati.template)) {
+        renderVerbaleHaccp(doc, dati);
+      } else {
+        renderCopertina(doc, dati);
+        renderSezioni(doc, dati);
+        renderRilieviConclusivi(doc, dati);
+      }
       renderFooters(doc, dati);
 
       doc.end();
@@ -154,6 +176,196 @@ export async function generaVerbale(dati: VerbaleData): Promise<Buffer> {
       reject(e instanceof Error ? e : new Error(String(e)));
     }
   });
+}
+
+// ── Verbale HACCP (Sprint HACCP 2, C4) ───────────────────────────────────────
+// Layout dedicato: intestazione con campi extra, tabella punteggi per sezione,
+// livello di conformità complessivo NUMERICO (0–100), conteggi, rilievi con
+// osservazioni. Etichette HACCP ovunque; campi tecnici (guida, note_template)
+// mai stampati.
+function renderVerbaleHaccp(doc: Doc, dati: VerbaleData): void {
+  const larg = larghezzaContenuto(doc);
+  const x0 = MARGINE;
+  const etich = (e: EsitoRisposta): string => dati.template.etichette?.[e] ?? ETICHETTA_ESITO[e];
+  const extra = dati.intestazioneExtra ?? {};
+  const hhmm = (s: string | null | undefined) =>
+    typeof s === "string" && s.length >= 4 ? s.slice(0, 5) : null;
+
+  const riga = (label: string, valore: string | null | undefined) => {
+    if (!valore || !String(valore).trim()) return;
+    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(GRIGIO).text(`${label}: `, { continued: true });
+    doc.font("Helvetica").fillColor(NERO).text(String(valore));
+    doc.moveDown(0.15);
+  };
+
+  // ── Intestazione ──
+  doc.moveDown(1);
+  doc.font("Helvetica-Bold").fontSize(18).fillColor(BRAND).text("Verbale di verifica HACCP");
+  doc.moveDown(0.3);
+  doc
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor(GRIGIO)
+    .text(`${dati.visita.numero_verbale} · ${formatData(dati.visita.data_visita)}`);
+  doc.moveDown(1);
+
+  const orario = [hhmm(dati.visita.ora_inizio), hhmm(extra.ora_fine)].filter(Boolean).join(" – ");
+  const areeVisitate = Array.isArray(extra.aree_visitate)
+    ? extra.aree_visitate.join(", ")
+    : extra.aree_visitate;
+  riga("Cliente", dati.cliente.ragione_sociale);
+  riga("Sede", `${dati.sede.nome} · ${dati.sede.indirizzo}, ${dati.sede.citta}`);
+  riga(
+    "Tecnico",
+    dati.specialist.nome_completo +
+      (dati.specialist.qualifica ? ` (${dati.specialist.qualifica})` : "")
+  );
+  riga("Orario", orario || null);
+  riga(
+    "Referente presente",
+    dati.referente_cliente
+      ? dati.referente_cliente + (extra.funzione_referente ? ` — ${extra.funzione_referente}` : "")
+      : null
+  );
+  riga("Attività in corso", extra.attivita_in_corso);
+  riga("Aree visitate", areeVisitate);
+  riga("Aree non visitate", extra.aree_non_visitate_motivo);
+  if (extra.flag_rilievi_fotografici) riga("Rilievi fotografici", "Acquisiti durante il sopralluogo");
+  doc.moveDown(0.8);
+
+  // ── Analisi (scoring + riepilogo) dal motore haccp_media_sezione ──
+  const sezioni = [...dati.template.sezioni].sort((a, b) => a.ordine - b.ordine);
+  const voci: VoceRisposta[] = [];
+  for (const s of sezioni)
+    for (const d of s.domande) {
+      const r = dati.risposte[d.id];
+      voci.push({
+        sezioneId: s.id,
+        domandaId: d.id,
+        titolo: d.titolo,
+        testo: d.testo,
+        valore: r?.esito ?? null,
+        osservazione: r?.osservazione_evidenza ?? null,
+        motivazione: r?.osservazioni ?? null,
+      });
+    }
+  const A = analizzaHaccp(voci, sezioni.map((s) => s.id));
+
+  // ── Esito ──
+  assicuraSpazio(doc, 140);
+  doc.font("Helvetica-Bold").fontSize(13).fillColor(BRAND).text("Esito della verifica");
+  doc.moveDown(0.4);
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(NERO).text("Livello di conformità complessivo: ", { continued: true });
+  doc.fillColor(BRAND).text(A.livelloComplessivo === null ? "n/d" : `${A.livelloComplessivo}/100`);
+  doc.moveDown(0.5);
+  const c = A.conteggi;
+  doc
+    .font("Helvetica")
+    .fontSize(9.5)
+    .fillColor(NERO)
+    .text(
+      `${etich("C")}: ${c.C}    ${etich("PC")}: ${c.PC}    ${etich("NC")}: ${c.NC}    ${etich("NA")}: ${c.NA}    ${etich("NV")}: ${c.NV}`
+    );
+  doc.moveDown(0.7);
+
+  // Tabella sezioni: Sezione | Valutate | Punteggio
+  const nomeSez = new Map(sezioni.map((s) => [s.id, s.nome]));
+  const colScore = 85;
+  const colVal = 65;
+  const drawRow = (a: string, b: string, cc: string, bold = false, colore = NERO) => {
+    assicuraSpazio(doc, 18);
+    const y = doc.y;
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(9).fillColor(colore);
+    doc.text(a, x0, y, { width: larg - colScore - colVal });
+    const yA = doc.y;
+    doc.text(b, x0 + larg - colScore - colVal, y, { width: colVal, align: "center" });
+    doc.text(cc, x0 + larg - colScore, y, { width: colScore, align: "right" });
+    doc.y = Math.max(yA, doc.y);
+    doc.moveDown(0.35);
+  };
+  drawRow("Sezione", "Valutate", "Punteggio", true, GRIGIO);
+  doc.moveTo(x0, doc.y).lineTo(x0 + larg, doc.y).strokeColor("#e5e7eb").stroke();
+  doc.moveDown(0.3);
+  for (const s of A.sezioni) {
+    drawRow(
+      nomeSez.get(s.sezioneId) ?? s.sezioneId,
+      String(s.valutate),
+      s.punteggio === null ? "n/d" : `${s.punteggio}/100`
+    );
+  }
+  // La tabella usa posizionamento assoluto (x espliciti): ripristina il margine
+  // sinistro, altrimenti il testo che segue eredita l'ultimo x e va a colonna stretta.
+  doc.x = x0;
+  doc.moveDown(0.5);
+
+  if (A.nvRilevanti) {
+    assicuraSpazio(doc, 40);
+    doc
+      .font("Helvetica-Oblique")
+      .fontSize(8.5)
+      .fillColor(GRIGIO)
+      .text(
+        "Nota: la presenza di voci «Non Verificato» limita l'attendibilità complessiva della verifica; le relative motivazioni sono riportate sotto."
+      );
+    doc.moveDown(0.6);
+  }
+
+  // ── Rilievi (NC poi Migliorabili) ──
+  assicuraSpazio(doc, 60);
+  doc.font("Helvetica-Bold").fontSize(13).fillColor(BRAND).text("Rilievi");
+  doc.moveDown(0.4);
+  if (A.rilievi.length === 0) {
+    doc
+      .font("Helvetica")
+      .fontSize(9.5)
+      .fillColor(NERO)
+      .text("Nessuna non conformità o area migliorabile riscontrata.");
+    doc.moveDown(0.5);
+  } else {
+    for (const r of A.rilievi) {
+      assicuraSpazio(doc, 45);
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(9.5)
+        .fillColor(COLORE_ESITO[r.esito])
+        .text(`[${r.sezioneId}] ${r.titolo ?? ""} — ${etich(r.esito)}`);
+      if (r.testo) doc.font("Helvetica").fontSize(8.5).fillColor(GRIGIO).text(r.testo);
+      if (r.osservazione)
+        doc.font("Helvetica-Oblique").fontSize(9).fillColor(NERO).text(`Osservazione: ${r.osservazione}`);
+      doc.moveDown(0.4);
+    }
+  }
+
+  if (A.noteNv.length > 0) {
+    assicuraSpazio(doc, 40);
+    doc.moveDown(0.2);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(GRIGIO).text("Voci non verificate");
+    doc.moveDown(0.2);
+    for (const n of A.noteNv) {
+      assicuraSpazio(doc, 24);
+      doc.font("Helvetica").fontSize(9).fillColor(NERO).text(`[${n.sezioneId}] ${n.titolo ?? ""}`);
+      if (n.motivazione)
+        doc.font("Helvetica-Oblique").fontSize(8.5).fillColor(GRIGIO).text(`Motivazione: ${n.motivazione}`);
+      doc.moveDown(0.25);
+    }
+  }
+  doc.moveDown(0.6);
+
+  // ── Chiusura: presa visione + note finali ──
+  assicuraSpazio(doc, 80);
+  doc.font("Helvetica-Bold").fontSize(13).fillColor(BRAND).text("Chiusura");
+  doc.moveDown(0.4);
+  riga("Referente presente", dati.referente_cliente);
+  if (extra.presa_visione_referente_testuale?.trim()) {
+    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(GRIGIO).text("Presa visione del referente:");
+    doc.font("Helvetica").fontSize(9.5).fillColor(NERO).text(extra.presa_visione_referente_testuale);
+    doc.moveDown(0.4);
+  }
+  if (dati.visita.note_finali_visita?.trim()) {
+    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(GRIGIO).text("Note finali del tecnico:");
+    doc.font("Helvetica").fontSize(9.5).fillColor(NERO).text(dati.visita.note_finali_visita);
+    doc.moveDown(0.4);
+  }
 }
 
 // ── Copertina ──────────────────────────────────────────────────────────────

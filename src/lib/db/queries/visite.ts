@@ -26,6 +26,7 @@ export interface VisitaDettaglio {
   sostituisce: string | null;
   sostituito_da: string | null;
   template_snapshot: TemplateSnapshot;
+  intestazione_extra: Record<string, unknown>;
   cliente_nome: string;
   sede_nome: string;
   sede_indirizzo: string;
@@ -72,6 +73,7 @@ interface VisitaConRelazioni {
   sostituisce: string | null;
   sostituito_da: string | null;
   template_snapshot: TemplateSnapshot;
+  intestazione_extra?: Record<string, unknown> | null;
   clienti: { ragione_sociale: string } | null;
   sedi: { nome: string; indirizzo: string; citta: string } | null;
   utenti: { nome_completo: string } | null;
@@ -81,6 +83,7 @@ const SELECT_DETTAGLIO = `
   id, cliente_id, sede_id, specialist_id, stato, stato_verbale, data_visita, ora_inizio,
   referente_cliente, qualifica_tecnico, note_preliminari, numero_verbale,
   note_conclusive, derivato_da, sostituisce, sostituito_da, template_snapshot,
+  intestazione_extra,
   clienti ( ragione_sociale ),
   sedi ( nome, indirizzo, citta ),
   utenti ( nome_completo )
@@ -92,6 +95,7 @@ const SELECT_DETTAGLIO_SENZA_006 = `
   id, cliente_id, sede_id, specialist_id, stato, stato_verbale, data_visita, ora_inizio,
   referente_cliente, numero_verbale,
   note_conclusive, derivato_da, sostituisce, sostituito_da, template_snapshot,
+  intestazione_extra,
   clienti ( ragione_sociale ),
   sedi ( nome, indirizzo, citta ),
   utenti ( nome_completo )
@@ -215,6 +219,7 @@ export async function getVisitaById(id: string): Promise<VisitaDettaglio | null>
     sostituisce: v.sostituisce ?? null,
     sostituito_da: v.sostituito_da ?? null,
     template_snapshot: v.template_snapshot,
+    intestazione_extra: (v.intestazione_extra ?? {}) as Record<string, unknown>,
     cliente_nome: v.clienti?.ragione_sociale ?? "—",
     sede_nome: v.sedi?.nome ?? "—",
     sede_indirizzo: v.sedi?.indirizzo ?? "",

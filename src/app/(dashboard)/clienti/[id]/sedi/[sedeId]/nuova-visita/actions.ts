@@ -6,6 +6,7 @@ import { creaVisita, eliminaVisitaBozza } from "@/lib/db/queries/visite";
 import {
   slotAncoraProponibile,
   collegaSlot,
+  getModuloIdSlot,
 } from "@/lib/db/queries/pianificazione";
 
 /**
@@ -13,7 +14,11 @@ import {
  * reindirizza. Usata dove non esistono slot proponibili (zero frizione):
  *   <form action={nuovaVisitaAction.bind(null, clienteId, sedeId)}>
  */
-export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
+export async function nuovaVisitaAction(
+  clienteId: string,
+  sedeId: string,
+  moduloId?: string
+) {
   const { user } = await getCurrentUser();
   if (!user) {
     redirect("/login");
@@ -23,6 +28,7 @@ export async function nuovaVisitaAction(clienteId: string, sedeId: string) {
     clienteId,
     sedeId,
     specialistId: user.id,
+    moduloId, // undefined → default sicurezza (sede mono-modulo, flusso invariato)
   });
 
   redirect(`/visite/${visitaId}/avvia`);
@@ -49,7 +55,8 @@ export type CreaVisitaConSlotResult =
 export async function creaVisitaConSlotAction(
   clienteId: string,
   sedeId: string,
-  scelta: string
+  scelta: string,
+  moduloId?: string
 ): Promise<CreaVisitaConSlotResult> {
   const { user } = await getCurrentUser();
   if (!user) return { ok: false, error: "Sessione scaduta. Effettua di nuovo l'accesso." };
@@ -57,7 +64,8 @@ export async function creaVisitaConSlotAction(
   if (!scelta) return { ok: false, error: "Seleziona un'opzione per continuare." };
 
   if (scelta === "fuori-piano") {
-    const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id });
+    // Fuori piano: il modulo è quello scelto (o default sicurezza su sede mono-modulo).
+    const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id, moduloId });
     return { ok: true, visitaId };
   }
 
@@ -69,7 +77,15 @@ export async function creaVisitaConSlotAction(
     return { ok: false, error: conflitto };
   }
 
-  const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id });
+  // Da slot: la visita eredita il modulo del piano dello slot (coerenza garantita,
+  // il moduloId del client è ignorato qui). collegaSlot ricontrolla comunque.
+  const moduloSlot = (await getModuloIdSlot(slotId)) ?? undefined;
+  const visitaId = await creaVisita({
+    clienteId,
+    sedeId,
+    specialistId: user.id,
+    moduloId: moduloSlot,
+  });
 
   const collegato = await collegaSlot(slotId, visitaId, user.id);
   if (!collegato) {

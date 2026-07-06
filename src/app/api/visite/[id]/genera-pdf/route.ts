@@ -13,13 +13,18 @@ import {
   getRisposteImpreseByVisita,
 } from "@/lib/db/queries/imprese";
 import { BUCKET_VERBALI } from "@/lib/db/queries/verbali";
-import { generaVerbale, type VerbaleData } from "@/lib/pdf/generaVerbale";
+import {
+  generaVerbale,
+  type VerbaleData,
+  type IntestazioneExtraHaccp,
+} from "@/lib/pdf/generaVerbale";
 import {
   sezioneCollassata,
   domandaGateAttiva,
   completezzaImpreseSezioneOtto,
   completezzaFormazione,
 } from "@/lib/checklist/completa";
+import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
 
@@ -126,6 +131,10 @@ export async function POST(
   const rispostaImpresaPer = new Map(
     risposteImprese.map((r) => [`${r.impresaId}:${r.domandaId}`, r])
   );
+  // Il modello obblighi differisce per modulo: HACCP → PC/NC richiedono
+  // osservazione (osservazione_evidenza), NV richiede motivazione; sicurezza →
+  // PC/NC richiedono azione correttiva, NV/NA motivazione. (Sprint HACCP 2, C3/C4)
+  const haccp = isSnapshotHaccp(visita.template_snapshot);
   let obbligatorieMancanti = 0;
   let campiTestoMancanti = 0;
   for (const sez of visita.template_snapshot.sezioni) {
@@ -154,7 +163,14 @@ export async function POST(
         if (d.obbligatoria) obbligatorieMancanti += 1;
         continue;
       }
-      if (v === "NC" || v === "PC") {
+      if (haccp) {
+        // HACCP: PC/NC → osservazione obbligatoria; NV → motivazione; C/NA liberi.
+        if (v === "NC" || v === "PC") {
+          if (!(r?.osservazione_evidenza ?? "").trim()) campiTestoMancanti += 1;
+        } else if (v === "NV") {
+          if (!(r?.osservazioni ?? "").trim()) campiTestoMancanti += 1;
+        }
+      } else if (v === "NC" || v === "PC") {
         if (!(r?.azione_correttiva ?? "").trim()) campiTestoMancanti += 1;
       } else if (v === "NV" || v === "NA") {
         if (!(r?.osservazioni ?? "").trim()) campiTestoMancanti += 1;
@@ -242,6 +258,7 @@ export async function POST(
     referente_cliente: visita.referente_cliente,
     nominativi,
     template: visita.template_snapshot,
+    intestazioneExtra: visita.intestazione_extra as IntestazioneExtraHaccp,
     lavoratori,
     impreseAppalto: imprese,
     risposteImprese,
