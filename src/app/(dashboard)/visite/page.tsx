@@ -9,6 +9,7 @@ import {
 import { getModuliAttivabili } from "@/lib/db/queries/moduli";
 import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
+import BadgeModulo from "@/components/ui/BadgeModulo";
 import EmptyState from "@/components/ui/EmptyState";
 import FilterBar, { type FilterConfig } from "@/components/filters/FilterBar";
 import AzioniVerbale from "./AzioniVerbale";
@@ -97,7 +98,7 @@ export default async function VisitePage({
           {/* Card stack — mobile */}
           <div className="space-y-3 sm:hidden">
             {visite.map((v) => (
-              <VisitaCard key={v.id} v={v} />
+              <VisitaCard key={v.id} v={v} mostraModulo={moduli.length > 1} />
             ))}
           </div>
 
@@ -119,7 +120,12 @@ export default async function VisitePage({
                     <td className="px-4 py-3">
                       <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{v.cliente_nome}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <span className="inline-flex items-center gap-2">
+                        {v.cliente_nome}
+                        <BadgeModulo nomeBreve={v.moduloNomeBreve ?? ""} famiglia={v.moduloFamiglia} mostra={moduli.length > 1} />
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-gray-700">{v.sede_nome}</td>
                     <td className="px-4 py-3 text-gray-700">{formatDate(v.data_visita)}</td>
                     <td className="px-4 py-3 text-right">
@@ -136,12 +142,15 @@ export default async function VisitePage({
   );
 }
 
-function VisitaCard({ v }: { v: VisitaRiepilogo }) {
+function VisitaCard({ v, mostraModulo }: { v: VisitaRiepilogo; mostraModulo: boolean }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-medium text-gray-900">{v.cliente_nome}</p>
+          <p className="flex items-center gap-2 truncate font-medium text-gray-900">
+            <span className="truncate">{v.cliente_nome}</span>
+            <BadgeModulo nomeBreve={v.moduloNomeBreve ?? ""} famiglia={v.moduloFamiglia} mostra={mostraModulo} />
+          </p>
           <p className="truncate text-sm text-gray-600">{v.sede_nome}</p>
           <p className="mt-0.5 text-xs text-gray-500">{formatDate(v.data_visita)}</p>
         </div>

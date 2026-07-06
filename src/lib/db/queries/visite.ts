@@ -53,6 +53,10 @@ export interface VisitaRiepilogo {
   sede_id: string;
   cliente_nome: string;
   sede_nome: string;
+  // Modulo/tipologia per il badge (Sprint HACCP 2, C5). Popolati solo dove il
+  // select include il join `moduli` (archivio /visite); altrove undefined.
+  moduloFamiglia?: "sicurezza" | "haccp";
+  moduloNomeBreve?: string;
 }
 
 interface VisitaConRelazioni {
@@ -77,6 +81,7 @@ interface VisitaConRelazioni {
   clienti: { ragione_sociale: string } | null;
   sedi: { nome: string; indirizzo: string; citta: string } | null;
   utenti: { nome_completo: string } | null;
+  moduli?: { famiglia: "sicurezza" | "haccp"; nome_commerciale: string } | null;
 }
 
 const SELECT_DETTAGLIO = `
@@ -365,7 +370,7 @@ export async function getVisiteFiltrate(f: FiltriVisite): Promise<VisitaRiepilog
 
   let q = supabase
     .from("visite")
-    .select(`id, stato, stato_verbale, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome )`);
+    .select(`id, stato, stato_verbale, data_visita, numero_verbale, sede_id, clienti ( ragione_sociale ), sedi ( nome ), moduli ( famiglia, nome_commerciale )`);
 
   if (f.clienteId) q = q.eq("cliente_id", f.clienteId);
   if (f.sedeId) q = q.eq("sede_id", f.sedeId);
@@ -437,6 +442,8 @@ function mapRiepilogo(v: VisitaConRelazioni): VisitaRiepilogo {
     sede_id: v.sede_id,
     cliente_nome: v.clienti?.ragione_sociale ?? "—",
     sede_nome: v.sedi?.nome ?? "—",
+    moduloFamiglia: v.moduli?.famiglia,
+    moduloNomeBreve: v.moduli?.nome_commerciale?.replace(/^SafeCheck\s+/i, ""),
   };
 }
 
