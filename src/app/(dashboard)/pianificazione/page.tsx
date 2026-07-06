@@ -9,6 +9,7 @@ import {
   getClientiOpzioni,
   getSediOpzioni,
   getTecniciOpzioni,
+  getTecniciDisattivatiNomi,
 } from "@/lib/server/filtri-opzioni";
 import FilterBar, { type FilterConfig } from "@/components/filters/FilterBar";
 import PianificazioneClient, { type SlotRiga } from "./PianificazioneClient";
@@ -35,42 +36,56 @@ export default async function PianificazionePage({
   const range = rangePeriodo(filtri, oggi);
   const canManage = await canManagePlanning();
 
-  const [slots, clienti, sedi, tecniciRoster, tecniciRLS, piani] = await Promise.all([
-    getPianificazioneFiltrata({
-      clienteId: filtri.cliente,
-      sedeId: filtri.sede,
-      tecnicoId: canManage ? filtri.tecnico : undefined,
-      stato: filtri.stato,
-      dataDa: range.da,
-      dataA: range.a,
-    }),
-    getClientiOpzioni(),
-    getSediOpzioni(),
-    getTecniciOpzioni(), // roster completo (admin/planner), [] per lo specialist
-    getTecnici(), // via RLS: dà il "sé stesso" allo specialist per il nome del proprio slot
-    canManage ? getPianiConStato(oggi) : Promise.resolve([]),
-  ]);
+  const [slots, clienti, sedi, tecniciRoster, tecniciRLS, tecniciDisattivati, piani] =
+    await Promise.all([
+      getPianificazioneFiltrata({
+        clienteId: filtri.cliente,
+        sedeId: filtri.sede,
+        tecnicoId: canManage ? filtri.tecnico : undefined,
+        stato: filtri.stato,
+        dataDa: range.da,
+        dataA: range.a,
+      }),
+      getClientiOpzioni(),
+      getSediOpzioni(),
+      getTecniciOpzioni(), // roster completo (admin/planner), [] per lo specialist
+      getTecnici(), // via RLS: dà il "sé stesso" allo specialist per il nome del proprio slot
+      getTecniciDisattivatiNomi(), // solo per risolvere il nome degli slot storici, [] per lo specialist
+      canManage ? getPianiConStato(oggi) : Promise.resolve([]),
+    ]);
 
-  // Nome tecnico: unione roster (admin/planner) + RLS (self per lo specialist).
+  // Nome tecnico ATTIVO: unione roster (admin/planner) + RLS (self per lo specialist).
   const tecnicoNome = new Map<string, string>();
   for (const t of tecniciRLS) tecnicoNome.set(t.id, t.nomeCompleto);
   for (const t of tecniciRoster) tecnicoNome.set(t.value, t.label);
 
-  const righe: SlotRiga[] = slots.map((s) => ({
-    id: s.id,
-    clienteId: s.clienteId,
-    clienteNome: s.clienteNome,
-    sedeNome: s.sedeNome,
-    numeroVisita: s.numeroVisita,
-    cicloNumero: s.cicloNumero,
-    dataSuggerita: s.dataSuggerita,
-    dataPianificata: s.dataPianificata,
-    stato: s.stato,
-    visitaId: s.visitaId,
-    tecnicoId: s.tecnicoId,
-    tecnicoNome: s.tecnicoId ? tecnicoNome.get(s.tecnicoId) ?? null : null,
-    tecnicoPersonalizzato: s.tecnicoPersonalizzato,
-  }));
+  // Nome tecnico DISATTIVATO: mappa separata usata SOLO per etichettare gli slot
+  // storici (badge "Tecnico disattivato"), mai come opzione assegnabile.
+  const tecnicoDisattivatoNome = new Map<string, string>();
+  for (const t of tecniciDisattivati) tecnicoDisattivatoNome.set(t.value, t.label);
+
+  const righe: SlotRiga[] = slots.map((s) => {
+    const nomeAttivo = s.tecnicoId ? tecnicoNome.get(s.tecnicoId) ?? null : null;
+    // Tecnico assegnato ma non risolto tra gli attivi → cerca tra i disattivati.
+    const nomeDisattivato =
+      s.tecnicoId && !nomeAttivo ? tecnicoDisattivatoNome.get(s.tecnicoId) ?? null : null;
+    return {
+      id: s.id,
+      clienteId: s.clienteId,
+      clienteNome: s.clienteNome,
+      sedeNome: s.sedeNome,
+      numeroVisita: s.numeroVisita,
+      cicloNumero: s.cicloNumero,
+      dataSuggerita: s.dataSuggerita,
+      dataPianificata: s.dataPianificata,
+      stato: s.stato,
+      visitaId: s.visitaId,
+      tecnicoId: s.tecnicoId,
+      tecnicoNome: nomeAttivo ?? nomeDisattivato,
+      tecnicoDisattivato: nomeDisattivato != null,
+      tecnicoPersonalizzato: s.tecnicoPersonalizzato,
+    };
+  });
 
   const config: FilterConfig = {
     cliente: true,

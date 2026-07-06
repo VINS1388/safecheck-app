@@ -22,6 +22,7 @@ export interface SlotRiga {
   visitaId: string | null;
   tecnicoId: string | null;
   tecnicoNome: string | null;
+  tecnicoDisattivato: boolean; // tecnico assegnato ma ora disattivato (slot storico)
   tecnicoPersonalizzato: boolean;
 }
 
@@ -192,7 +193,16 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                     </p>
                     <div className="mt-0.5 flex items-center gap-1.5 text-xs">
                       {s.tecnicoId ? (
-                        <span className="text-gray-600">{s.tecnicoNome ?? "—"}</span>
+                        s.tecnicoDisattivato ? (
+                          <span
+                            className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600"
+                            title="Il tecnico assegnato è stato disattivato: lo slot resta assegnato a lui finché non viene riassegnato manualmente."
+                          >
+                            {s.tecnicoNome ? `${s.tecnicoNome} · ` : ""}Tecnico disattivato
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">{s.tecnicoNome ?? "—"}</span>
+                        )
                       ) : (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                           Da assegnare
@@ -254,6 +264,14 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                         className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
                       >
                         <option value="">Da assegnare</option>
+                        {/* Slot storico assegnato a un tecnico disattivato: opzione
+                            disabilitata (non riassegnabile) solo per mostrare il valore
+                            corrente finché l'admin non sceglie un tecnico attivo. */}
+                        {s.tecnicoDisattivato && s.tecnicoId && (
+                          <option value={s.tecnicoId} disabled>
+                            {(s.tecnicoNome ?? "Tecnico") + " · disattivato"}
+                          </option>
+                        )}
                         {tecnici.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.nome}

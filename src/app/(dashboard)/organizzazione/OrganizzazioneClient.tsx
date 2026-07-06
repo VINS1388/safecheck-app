@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmptyState from "@/components/ui/EmptyState";
 import {
@@ -8,6 +8,7 @@ import {
   cambiaRuoloAction,
   impostaAttivoAction,
   resetPasswordAction,
+  contaSlotFuturiTecnicoAction,
 } from "./actions";
 import type { RuoloUtente, UtenteLista } from "@/lib/server/organizzazione";
 
@@ -638,6 +639,20 @@ function DialogStato({
   const [errore, setErrore] = useState<string | null>(null);
   const disattiva = utente.attivo;
 
+  // Avviso non bloccante: quanti slot futuri restano assegnati a questo tecnico se
+  // lo disattiviamo. Solo in disattivazione; null = non ancora noto (nessun avviso).
+  const [slotImpattati, setSlotImpattati] = useState<number | null>(null);
+  useEffect(() => {
+    if (!disattiva) return;
+    let vivo = true;
+    contaSlotFuturiTecnicoAction(utente.id).then((r) => {
+      if (vivo && r.ok) setSlotImpattati(r.count);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [disattiva, utente.id]);
+
   async function conferma() {
     setErrore(null);
     setBusy(true);
@@ -669,6 +684,13 @@ function DialogStato({
             </>
           )}
         </p>
+        {disattiva && slotImpattati != null && slotImpattati > 0 && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {slotImpattati === 1
+              ? "1 slot di pianificazione futuro è assegnato a questo tecnico. Resterà assegnato a lui, segnalato come «Tecnico disattivato» nella pianificazione, finché non lo riassegni manualmente. La disattivazione non lo rimuove."
+              : `${slotImpattati} slot di pianificazione futuri sono assegnati a questo tecnico. Resteranno assegnati a lui, segnalati come «Tecnico disattivato» nella pianificazione, finché non li riassegni manualmente. La disattivazione non li rimuove.`}
+          </p>
+        )}
         {errore && <ErroreBox messaggio={errore} />}
         <div className="flex justify-end gap-3 pt-1">
           <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>

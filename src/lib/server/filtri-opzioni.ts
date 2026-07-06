@@ -53,3 +53,22 @@ export async function getTecniciOpzioni(): Promise<Opzione[]> {
     .order("nome_completo", { ascending: true });
   return (data ?? []).map((u) => ({ value: u.id, label: u.nome_completo }));
 }
+
+/**
+ * Nomi degli utenti DISATTIVATI (attivo=false), solo per RISOLVERE i nomi degli
+ * slot storici assegnati a un tecnico poi disattivato — così la pianificazione può
+ * distinguerli con un badge "Tecnico disattivato" invece del muto "—". NON è un
+ * roster assegnabile: i disattivati restano fuori da `getTecniciOpzioni`/`getTecnici`
+ * (dropdown), non vengono mai riproposti come assegnabili. Vuoto se il chiamante
+ * non è admin/planner (stesso gate verify→service-role del roster attivo).
+ */
+export async function getTecniciDisattivatiNomi(): Promise<Opzione[]> {
+  if (!(await canManagePlanning())) return [];
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("utenti")
+    .select("id, nome_completo")
+    .eq("attivo", false)
+    .order("nome_completo", { ascending: true });
+  return (data ?? []).map((u) => ({ value: u.id, label: u.nome_completo }));
+}

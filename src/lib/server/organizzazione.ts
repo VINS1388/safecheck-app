@@ -213,3 +213,22 @@ export async function resetPassword(userId: string): Promise<{ tempPassword: str
   if (error) throw new OrgError("generico", error.message);
   return { tempPassword: password };
 }
+
+/**
+ * Conteggio degli slot di pianificazione FUTURI (stato <> 'eseguita') assegnati a
+ * un tecnico. Usato come avviso non bloccante prima di disattivarlo: la
+ * disattivazione è consentita, gli slot restano assegnati a lui (segnalati come
+ * "Tecnico disattivato" in pianificazione) e potranno essere riassegnati a mano.
+ * Nessuna riassegnazione forzata (decisione Sprint 16 STEP 0).
+ */
+export async function contaSlotFuturiTecnico(userId: string): Promise<number> {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { count, error } = await admin
+    .from("visite_pianificate")
+    .select("id", { count: "exact", head: true })
+    .eq("tecnico_assegnato_id", userId)
+    .neq("stato", "eseguita");
+  if (error) throw new OrgError("generico", error.message);
+  return count ?? 0;
+}

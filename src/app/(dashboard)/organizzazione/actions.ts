@@ -6,6 +6,7 @@ import {
   cambiaRuolo,
   impostaAttivo,
   resetPassword,
+  contaSlotFuturiTecnico,
   OrgError,
   type RuoloUtente,
 } from "@/lib/server/organizzazione";
@@ -91,6 +92,18 @@ export async function resetPasswordAction(userId: string): Promise<ResetPassword
   try {
     const r = await resetPassword(userId);
     return { ok: true, tempPassword: r.tempPassword };
+  } catch (e) {
+    return { ok: false, error: messaggioErrore(e) };
+  }
+}
+
+export type ContaSlotResult = { ok: true; count: number } | { ok: false; error: string };
+
+/** Avviso pre-disattivazione: quanti slot futuri sono assegnati a questo tecnico. */
+export async function contaSlotFuturiTecnicoAction(userId: string): Promise<ContaSlotResult> {
+  try {
+    const count = await contaSlotFuturiTecnico(userId);
+    return { ok: true, count };
   } catch (e) {
     return { ok: false, error: messaggioErrore(e) };
   }
