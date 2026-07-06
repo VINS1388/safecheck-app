@@ -4,7 +4,16 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ConteggiSezione } from "./page";
-import { salvaNoteFinaliAction } from "./actions";
+import {
+  salvaNoteFinaliAction,
+  salvaIntestazioneHaccpAction,
+  type IntestazioneHaccpInput,
+} from "./actions";
+
+interface HaccpScoring {
+  livello: number | null;
+  sezioni: { id: string; nome: string; valutate: number; punteggio: number | null }[];
+}
 
 interface Totali {
   NC: number;
@@ -34,7 +43,13 @@ interface Props {
   totali: Totali;
   noteIniziali: string;
   genealogia: Genealogia;
+  // HACCP (Sprint HACCP 2): scoring + intestazione. Assenti sui verbali sicurezza.
+  isHaccp?: boolean;
+  haccpScoring?: HaccpScoring | null;
+  intestazioneIniziale?: Record<string, unknown>;
 }
+
+const asStr = (v: unknown): string => (typeof v === "string" ? v : "");
 
 type Stato = "idle" | "saving" | "saved" | "error";
 
@@ -59,10 +74,25 @@ export default function RiepilogoClient({
   totali,
   noteIniziali,
   genealogia,
+  isHaccp = false,
+  haccpScoring = null,
+  intestazioneIniziale = {},
 }: Props) {
   const router = useRouter();
   const [note, setNote] = useState(noteIniziali);
   const [statoNote, setStatoNote] = useState<Stato>("idle");
+  // Intestazione HACCP (7 campi extra su intestazione_extra). Autosave debounced.
+  const [intest, setIntest] = useState<IntestazioneHaccpInput>({
+    ora_fine: asStr(intestazioneIniziale.ora_fine),
+    funzione_referente: asStr(intestazioneIniziale.funzione_referente),
+    attivita_in_corso: asStr(intestazioneIniziale.attivita_in_corso),
+    aree_visitate: asStr(intestazioneIniziale.aree_visitate),
+    aree_non_visitate_motivo: asStr(intestazioneIniziale.aree_non_visitate_motivo),
+    flag_rilievi_fotografici: intestazioneIniziale.flag_rilievi_fotografici === true,
+    presa_visione_referente_testuale: asStr(intestazioneIniziale.presa_visione_referente_testuale),
+  });
+  const [statoIntest, setStatoIntest] = useState<Stato>("idle");
+  const timerIntest = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [generando, setGenerando] = useState(false);
   const [erroreGen, setErroreGen] = useState<string | null>(null);
   const [azione, setAzione] = useState<null | "duplica" | "sostitutivo">(null);
@@ -72,8 +102,13 @@ export default function RiepilogoClient({
   const chiusa = stato !== "bozza";
   const isChiuso = statoVerbale === "chiuso";
   const isSostituito = statoVerbale === "sostituito";
+  // HACCP: le aree visitate sono obbligatorie alla chiusura (il referente è già
+  // richiesto all'avvio). Blocca la generazione finché non compilate.
+  const areeMancanti = isHaccp && !(intest.aree_visitate ?? "").trim();
   const bloccato =
-    totali.obbligatorieSenzaRisposta > 0 || totali.campoMancante > 0;
+    totali.obbligatorieSenzaRisposta > 0 ||
+    totali.campoMancante > 0 ||
+    (!chiusa && areeMancanti);
 
   /** Esegue Duplica o Crea sostitutivo e naviga al nuovo verbale (bozza). */
   async function eseguiClone(tipo: "duplica" | "sostitutivo") {
@@ -99,6 +134,17 @@ export default function RiepilogoClient({
     timer.current = setTimeout(async () => {
       const res = await salvaNoteFinaliAction(visitaId, testo);
       setStatoNote(res.ok ? "saved" : "error");
+    }, 800);
+  }
+
+  function aggiornaIntest(patch: Partial<IntestazioneHaccpInput>) {
+    const next = { ...intest, ...patch };
+    setIntest(next);
+    setStatoIntest("saving");
+    if (timerIntest.current) clearTimeout(timerIntest.current);
+    timerIntest.current = setTimeout(async () => {
+      const res = await salvaIntestazioneHaccpAction(visitaId, next);
+      setStatoIntest(res.ok ? "saved" : "error");
     }, 800);
   }
 
@@ -161,6 +207,33 @@ export default function RiepilogoClient({
               </li>
             )}
           </ul>
+        </div>
+      )}
+
+      {/* Livello di conformità HACCP (motore haccp_media_sezione) */}
+      {isHaccp && haccpScoring && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-900">
+              Livello di conformità complessivo
+            </p>
+            <p className="text-2xl font-bold text-[#1e3a5f]">
+              {haccpScoring.livello === null ? "n/d" : `${haccpScoring.livello}/100`}
+            </p>
+          </div>
+          <div className="mt-3 space-y-1">
+            {haccpScoring.sezioni.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate text-gray-600">
+                  <span className="font-medium text-gray-800">{s.id}</span> {s.nome}
+                </span>
+                <span className="flex-shrink-0 font-medium text-gray-800">
+                  {s.punteggio === null ? "n/d" : `${s.punteggio}/100`}
+                  <span className="ml-1 font-normal text-gray-400">({s.valutate})</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -262,6 +335,102 @@ export default function RiepilogoClient({
         />
       </div>
 
+      {/* Intestazione HACCP (campi extra su intestazione_extra). Aree obbligatorie
+          alla chiusura; il resto facoltativo. Sola lettura se chiusa. */}
+      {isHaccp && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">Intestazione HACCP</p>
+            {!chiusa && (
+              <span className="text-xs text-gray-400">
+                {statoIntest === "saving" ? "Salvataggio…" : statoIntest === "saved" ? "Salvato" : statoIntest === "error" ? "Errore di salvataggio" : ""}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-xs font-medium text-gray-700">
+              Ora fine
+              <input
+                type="time"
+                value={asStr(intest.ora_fine)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ ora_fine: e.target.value })}
+                className="mt-1 block min-h-[40px] w-full rounded-md border border-gray-300 px-3 text-sm disabled:bg-gray-50"
+              />
+            </label>
+            <label className="text-xs font-medium text-gray-700">
+              Funzione del referente
+              <input
+                type="text"
+                value={asStr(intest.funzione_referente)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ funzione_referente: e.target.value })}
+                placeholder="Es. Titolare, responsabile autocontrollo…"
+                className="mt-1 block min-h-[40px] w-full rounded-md border border-gray-300 px-3 text-sm placeholder:text-gray-400 disabled:bg-gray-50"
+              />
+            </label>
+            <label className="text-xs font-medium text-gray-700 sm:col-span-2">
+              Attività in corso durante la visita
+              <input
+                type="text"
+                value={asStr(intest.attivita_in_corso)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ attivita_in_corso: e.target.value })}
+                placeholder="Es. preparazione pasti, ricevimento merci…"
+                className="mt-1 block min-h-[40px] w-full rounded-md border border-gray-300 px-3 text-sm placeholder:text-gray-400 disabled:bg-gray-50"
+              />
+            </label>
+            <label className="text-xs font-medium text-gray-700 sm:col-span-2">
+              Aree visitate <span className="text-red-500" title="Obbligatoria">*</span>
+              <textarea
+                value={asStr(intest.aree_visitate)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ aree_visitate: e.target.value })}
+                rows={2}
+                placeholder="Elenca le aree ispezionate (cucina, cella, dispensa…)"
+                className={`mt-1 block w-full resize-y rounded-md border px-3 py-2 text-sm placeholder:text-gray-400 disabled:bg-gray-50 ${!chiusa && areeMancanti ? "border-red-300" : "border-gray-300"}`}
+              />
+              {!chiusa && areeMancanti && (
+                <span className="mt-0.5 block font-normal text-red-500">
+                  Obbligatorio per chiudere il verbale.
+                </span>
+              )}
+            </label>
+            <label className="text-xs font-medium text-gray-700 sm:col-span-2">
+              Aree non visitate e motivo
+              <textarea
+                value={asStr(intest.aree_non_visitate_motivo)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ aree_non_visitate_motivo: e.target.value })}
+                rows={2}
+                placeholder="Eventuali aree non ispezionate e perché"
+                className="mt-1 block w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 disabled:bg-gray-50"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs font-medium text-gray-700 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={intest.flag_rilievi_fotografici === true}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ flag_rilievi_fotografici: e.target.checked })}
+              />
+              Rilievi fotografici acquisiti durante il sopralluogo
+            </label>
+            <label className="text-xs font-medium text-gray-700 sm:col-span-2">
+              Presa visione del referente
+              <textarea
+                value={asStr(intest.presa_visione_referente_testuale)}
+                disabled={chiusa}
+                onChange={(e) => aggiornaIntest({ presa_visione_referente_testuale: e.target.value })}
+                rows={2}
+                placeholder="Dichiarazione di presa visione dei rilievi"
+                className="mt-1 block w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 disabled:bg-gray-50"
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* Note finali (sola lettura se chiusa) */}
       <div>
         <div className="flex items-center justify-between">
@@ -319,6 +488,12 @@ export default function RiepilogoClient({
           {totali.campoMancante} domand
           {totali.campoMancante === 1 ? "a" : "e"} con campo obbligatorio non
           compilato (azione correttiva o motivazione) — impossibile chiudere.
+        </div>
+      )}
+
+      {!chiusa && isHaccp && areeMancanti && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {"Compila le «Aree visitate» nell'intestazione HACCP — impossibile chiudere."}
         </div>
       )}
 

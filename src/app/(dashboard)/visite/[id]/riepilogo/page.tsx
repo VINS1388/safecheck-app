@@ -14,6 +14,8 @@ import {
   completezzaFormazione,
 } from "@/lib/checklist/completa";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
+import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
+import { analizzaHaccp, type VoceRisposta } from "@/lib/checklist/scoringHaccp";
 import type { EsitoRisposta } from "@/types";
 import RiepilogoClient from "./RiepilogoClient";
 
@@ -69,6 +71,8 @@ export default async function RiepilogoPage({
     risposteImprese.map((r) => [`${r.impresaId}:${r.domandaId}`, r])
   );
 
+  const isHaccp = isSnapshotHaccp(visita.template_snapshot);
+
   const sezioni = [...visita.template_snapshot.sezioni].sort(
     (a, b) => a.ordine - b.ordine
   );
@@ -121,10 +125,20 @@ export default async function RiepilogoPage({
         if (d.obbligatoria) c.obbligatorieSenzaRisposta += 1;
       } else {
         c[v] += 1;
-        // Esito selezionato ma campo testo obbligatorio mancante.
-        const testo = v === "PC" || v === "NC" ? r?.azione_correttiva : r?.osservazioni;
-        if (richiedeTesto(v) && !(testo ?? "").trim()) {
-          c.campoMancante += 1;
+        // Esito selezionato ma campo testo obbligatorio mancante. HACCP: PC/NC →
+        // osservazione (osservazione_evidenza), NV → motivazione, C/NA liberi.
+        // Sicurezza: PC/NC → azione, NV/NA → motivazione.
+        if (isHaccp) {
+          if ((v === "PC" || v === "NC") && !(r?.osservazione_evidenza ?? "").trim()) {
+            c.campoMancante += 1;
+          } else if (v === "NV" && !(r?.osservazioni ?? "").trim()) {
+            c.campoMancante += 1;
+          }
+        } else {
+          const testo = v === "PC" || v === "NC" ? r?.azione_correttiva : r?.osservazioni;
+          if (richiedeTesto(v) && !(testo ?? "").trim()) {
+            c.campoMancante += 1;
+          }
         }
       }
     }
@@ -184,6 +198,32 @@ export default async function RiepilogoPage({
     ),
   };
 
+  // Scoring HACCP (motore haccp_media_sezione) per il display del riepilogo.
+  const haccpScoring = isHaccp
+    ? (() => {
+        const voci: VoceRisposta[] = [];
+        for (const s of sezioni)
+          for (const d of s.domande) {
+            const r = rispostaPer.get(d.id);
+            voci.push({
+              sezioneId: s.id,
+              domandaId: d.id,
+              valore: (r?.valore ?? null) as EsitoRisposta | null,
+            });
+          }
+        const A = analizzaHaccp(voci, sezioni.map((s) => s.id));
+        return {
+          livello: A.livelloComplessivo,
+          sezioni: A.sezioni.map((sp) => ({
+            id: sp.sezioneId,
+            nome: sezioni.find((x) => x.id === sp.sezioneId)?.nome ?? sp.sezioneId,
+            valutate: sp.valutate,
+            punteggio: sp.punteggio,
+          })),
+        };
+      })()
+    : null;
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
@@ -210,6 +250,9 @@ export default async function RiepilogoPage({
         totali={totali}
         noteIniziali={visita.note_conclusive ?? ""}
         genealogia={genealogia}
+        isHaccp={isHaccp}
+        haccpScoring={haccpScoring}
+        intestazioneIniziale={(visita.intestazione_extra ?? {}) as Record<string, unknown>}
       />
     </div>
   );
