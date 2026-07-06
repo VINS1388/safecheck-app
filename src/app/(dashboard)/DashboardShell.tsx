@@ -134,6 +134,12 @@ function UserBox({
       <p className="mb-3 text-[11px] uppercase tracking-wide text-white/55">
         {ruolo}
       </p>
+      <Link
+        href="/profilo"
+        className="mb-2 block rounded-md px-3 py-2 text-sm font-medium text-white/85 transition hover:bg-white/10 hover:text-white"
+      >
+        Il mio profilo
+      </Link>
       <form action={logoutAction}>
         <button
           type="submit"

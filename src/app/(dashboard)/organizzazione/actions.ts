@@ -7,9 +7,17 @@ import {
   impostaAttivo,
   resetPassword,
   contaSlotFuturiTecnico,
+  aggiornaAnagraficaUtente,
+  dipendenzeUtente,
+  eliminaUtenteFisico,
   OrgError,
   type RuoloUtente,
+  type DipendenzeUtente,
 } from "@/lib/server/organizzazione";
+import {
+  aggiornaProfiloOrganizzazione,
+  type AggiornaProfiloOrgInput,
+} from "@/lib/server/org-profilo";
 
 /**
  * Server actions dell'area /organizzazione. Sottili: delegano al modulo dati
@@ -71,6 +79,32 @@ export async function cambiaRuoloAction(
   }
 }
 
+export async function aggiornaAnagraficaUtenteAction(
+  userId: string,
+  input: { nome_completo: string; telefono: string | null; qualifica: string | null }
+): Promise<AzioneResult> {
+  try {
+    await aggiornaAnagraficaUtente(userId, input);
+    revalidatePath("/organizzazione");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: messaggioErrore(e) };
+  }
+}
+
+export async function aggiornaProfiloOrganizzazioneAction(
+  input: AggiornaProfiloOrgInput
+): Promise<AzioneResult> {
+  try {
+    await aggiornaProfiloOrganizzazione(input);
+    revalidatePath("/organizzazione");
+    revalidatePath("/profilo");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Operazione non completata." };
+  }
+}
+
 export async function impostaAttivoAction(
   userId: string,
   attivo: boolean
@@ -92,6 +126,31 @@ export async function resetPasswordAction(userId: string): Promise<ResetPassword
   try {
     const r = await resetPassword(userId);
     return { ok: true, tempPassword: r.tempPassword };
+  } catch (e) {
+    return { ok: false, error: messaggioErrore(e) };
+  }
+}
+
+export type DipendenzeUtenteResult =
+  | { ok: true; dip: DipendenzeUtente }
+  | { ok: false; error: string };
+
+/** Dipendenze di un utente, per abilitare/spiegare l'eliminazione fisica in UI. */
+export async function dipendenzeUtenteAction(userId: string): Promise<DipendenzeUtenteResult> {
+  try {
+    const dip = await dipendenzeUtente(userId);
+    return { ok: true, dip };
+  } catch (e) {
+    return { ok: false, error: messaggioErrore(e) };
+  }
+}
+
+/** Eliminazione fisica di un utente pulito (gate in eliminaUtenteFisico via requireAdmin). */
+export async function eliminaUtenteFisicoAction(userId: string): Promise<AzioneResult> {
+  try {
+    await eliminaUtenteFisico(userId);
+    revalidatePath("/organizzazione");
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: messaggioErrore(e) };
   }

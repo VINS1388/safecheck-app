@@ -9,8 +9,14 @@ import {
   impostaAttivoAction,
   resetPasswordAction,
   contaSlotFuturiTecnicoAction,
+  aggiornaAnagraficaUtenteAction,
+  aggiornaProfiloOrganizzazioneAction,
+  dipendenzeUtenteAction,
+  eliminaUtenteFisicoAction,
 } from "./actions";
+import type { DipendenzeUtente } from "@/lib/server/organizzazione";
 import type { RuoloUtente, UtenteLista } from "@/lib/server/organizzazione";
+import type { ProfiloOrganizzazione } from "@/lib/server/org-profilo";
 
 // ── Costanti presentazione ───────────────────────────────────────────────────
 const RUOLO_LABEL: Record<RuoloUtente, string> = {
@@ -55,9 +61,12 @@ interface Riepilogo {
 
 type ModalState =
   | { type: "aggiungi" }
+  | { type: "org" }
+  | { type: "anagrafica"; utente: UtenteLista }
   | { type: "ruolo"; utente: UtenteLista }
   | { type: "reset"; utente: UtenteLista }
   | { type: "stato"; utente: UtenteLista }
+  | { type: "elimina"; utente: UtenteLista }
   | null;
 
 type PasswordReveal = { titolo: string; sottotitolo: string; password: string } | null;
@@ -65,9 +74,11 @@ type PasswordReveal = { titolo: string; sottotitolo: string; password: string } 
 export default function OrganizzazioneClient({
   utenti,
   riepilogo,
+  organizzazione,
 }: {
   utenti: UtenteLista[];
   riepilogo: Riepilogo;
+  organizzazione: ProfiloOrganizzazione | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -115,14 +126,37 @@ export default function OrganizzazioneClient({
         </button>
       </div>
 
-      {/* Sezione organizzazione (concettuale, Fase 3-ready) */}
+      {/* Profilo Organizzazione (dati reali, migration 031). Lettura: tutti;
+          scrittura: admin — qui siamo in area admin-only, quindi editabile. */}
       <div className="rounded-xl border border-gray-200 bg-gradient-to-r from-[#1e3a5f] to-[#2c5480] p-5 text-white">
-        <p className="text-[11px] uppercase tracking-wide text-white/60">Organizzazione corrente</p>
-        <p className="mt-0.5 text-lg font-semibold">Studio Bilello</p>
-        <p className="mt-1 text-sm text-white/70">
-          Tutti gli utenti condividono questo spazio di lavoro. La gestione per più organizzazioni
-          arriverà in una fase successiva.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wide text-white/60">Organizzazione corrente</p>
+            <p className="mt-0.5 text-lg font-semibold">
+              {organizzazione?.ragione_sociale ?? "—"}
+            </p>
+            {organizzazione && (
+              <p className="mt-1 text-sm text-white/70">
+                {[
+                  organizzazione.partita_iva ? `P.IVA ${organizzazione.partita_iva}` : null,
+                  [organizzazione.citta, organizzazione.provincia].filter(Boolean).join(" ") || null,
+                  organizzazione.email,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Completa i dati dell'organizzazione."}
+              </p>
+            )}
+          </div>
+          {organizzazione && (
+            <button
+              type="button"
+              onClick={() => setModal({ type: "org" })}
+              className="flex-shrink-0 rounded-md border border-white/30 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10"
+            >
+              Modifica
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Riepilogo */}
@@ -211,9 +245,11 @@ export default function OrganizzazioneClient({
                       <RigaAzioni
                         utente={u}
                         isLastAdmin={u.id === lastActiveAdminId}
+                        onModifica={() => setModal({ type: "anagrafica", utente: u })}
                         onRuolo={() => setModal({ type: "ruolo", utente: u })}
                         onReset={() => setModal({ type: "reset", utente: u })}
                         onStato={() => setModal({ type: "stato", utente: u })}
+                        onElimina={() => setModal({ type: "elimina", utente: u })}
                       />
                     </td>
                   </tr>
@@ -241,9 +277,11 @@ export default function OrganizzazioneClient({
                   <RigaAzioni
                     utente={u}
                     isLastAdmin={u.id === lastActiveAdminId}
+                    onModifica={() => setModal({ type: "anagrafica", utente: u })}
                     onRuolo={() => setModal({ type: "ruolo", utente: u })}
                     onReset={() => setModal({ type: "reset", utente: u })}
                     onStato={() => setModal({ type: "stato", utente: u })}
+                    onElimina={() => setModal({ type: "elimina", utente: u })}
                   />
                 </div>
               </div>
@@ -266,6 +304,12 @@ export default function OrganizzazioneClient({
             router.refresh();
           }}
         />
+      )}
+      {modal?.type === "org" && organizzazione && (
+        <DialogModificaOrganizzazione org={organizzazione} onClose={chiudiModal} onDone={dopoMutazione} />
+      )}
+      {modal?.type === "anagrafica" && (
+        <DialogModificaUtente utente={modal.utente} onClose={chiudiModal} onDone={dopoMutazione} />
       )}
       {modal?.type === "ruolo" && (
         <DialogRuolo
@@ -291,6 +335,9 @@ export default function OrganizzazioneClient({
       )}
       {modal?.type === "stato" && (
         <DialogStato utente={modal.utente} onClose={chiudiModal} onDone={dopoMutazione} />
+      )}
+      {modal?.type === "elimina" && (
+        <DialogElimina utente={modal.utente} onClose={chiudiModal} onDone={dopoMutazione} />
       )}
       {reveal && (
         <DialogPassword
@@ -342,19 +389,30 @@ function StatoBadgeUtente({ attivo }: { attivo: boolean }) {
 function RigaAzioni({
   utente,
   isLastAdmin,
+  onModifica,
   onRuolo,
   onReset,
   onStato,
+  onElimina,
 }: {
   utente: UtenteLista;
   isLastAdmin: boolean;
+  onModifica: () => void;
   onRuolo: () => void;
   onReset: () => void;
   onStato: () => void;
+  onElimina: () => void;
 }) {
   const azioneStatoBloccata = utente.attivo && isLastAdmin; // disattivare l'ultimo admin
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={onModifica}
+        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] hover:bg-[#1e3a5f]/10"
+      >
+        Modifica
+      </button>
       <button
         type="button"
         onClick={onRuolo}
@@ -388,6 +446,13 @@ function RigaAzioni({
           Riattiva
         </button>
       )}
+      <button
+        type="button"
+        onClick={onElimina}
+        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+      >
+        Elimina
+      </button>
     </div>
   );
 }
@@ -498,6 +563,184 @@ function DialogAggiungi({
           </button>
           <button type="submit" className={btnPrimary} disabled={busy}>
             {busy ? "Creazione…" : "Crea utente"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Dialog: modifica profilo Organizzazione (solo admin) ─────────────────────
+function DialogModificaOrganizzazione({
+  org,
+  onClose,
+  onDone,
+}: {
+  org: ProfiloOrganizzazione;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [f, setF] = useState({
+    ragione_sociale: org.ragione_sociale,
+    partita_iva: org.partita_iva ?? "",
+    codice_fiscale: org.codice_fiscale ?? "",
+    indirizzo: org.indirizzo ?? "",
+    citta: org.citta ?? "",
+    cap: org.cap ?? "",
+    provincia: org.provincia ?? "",
+    email: org.email ?? "",
+    telefono: org.telefono ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const nn = (v: string) => v.trim() || null;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrore(null);
+    setBusy(true);
+    const res = await aggiornaProfiloOrganizzazioneAction({
+      ragione_sociale: f.ragione_sociale,
+      partita_iva: nn(f.partita_iva),
+      codice_fiscale: nn(f.codice_fiscale),
+      indirizzo: nn(f.indirizzo),
+      citta: nn(f.citta),
+      cap: nn(f.cap),
+      provincia: nn(f.provincia),
+      email: nn(f.email),
+      telefono: nn(f.telefono),
+    });
+    if (res.ok) onDone();
+    else {
+      setErrore(res.error);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal titolo="Profilo organizzazione" sottotitolo="Dati dello studio, visibili a tutti gli utenti" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Ragione sociale <span className="text-red-500">*</span>
+          </label>
+          <input className={inputCls} value={f.ragione_sociale} onChange={set("ragione_sociale")} required />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Partita IVA</label>
+            <input className={inputCls} value={f.partita_iva} onChange={set("partita_iva")} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Codice fiscale</label>
+            <input className={inputCls} value={f.codice_fiscale} onChange={set("codice_fiscale")} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Indirizzo</label>
+          <input className={inputCls} value={f.indirizzo} onChange={set("indirizzo")} />
+        </div>
+        <div className="grid grid-cols-6 gap-4">
+          <div className="col-span-3">
+            <label className="block text-sm font-medium text-gray-700">Città</label>
+            <input className={inputCls} value={f.citta} onChange={set("citta")} />
+          </div>
+          <div className="col-span-1">
+            <label className="block text-sm font-medium text-gray-700">CAP</label>
+            <input className={inputCls} value={f.cap} onChange={set("cap")} />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700">Provincia</label>
+            <input className={`${inputCls} uppercase`} maxLength={2} value={f.provincia} onChange={set("provincia")} />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <input className={inputCls} type="email" value={f.email} onChange={set("email")} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Telefono</label>
+            <input className={inputCls} value={f.telefono} onChange={set("telefono")} />
+          </div>
+        </div>
+        {errore && <ErroreBox messaggio={errore} />}
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+            Annulla
+          </button>
+          <button type="submit" className={btnPrimary} disabled={busy}>
+            {busy ? "Salvataggio…" : "Salva"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Dialog: modifica anagrafica (nome/telefono/qualifica) ────────────────────
+function DialogModificaUtente({
+  utente,
+  onClose,
+  onDone,
+}: {
+  utente: UtenteLista;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [nome, setNome] = useState(utente.nome_completo);
+  const [telefono, setTelefono] = useState(utente.telefono ?? "");
+  const [qualifica, setQualifica] = useState(utente.qualifica ?? "");
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrore(null);
+    setBusy(true);
+    const res = await aggiornaAnagraficaUtenteAction(utente.id, {
+      nome_completo: nome,
+      telefono: telefono.trim() || null,
+      qualifica: qualifica.trim() || null,
+    });
+    if (res.ok) onDone();
+    else {
+      setErrore(res.error);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal titolo="Modifica dati utente" sottotitolo={utente.email} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Nome completo <span className="text-red-500">*</span>
+          </label>
+          <input className={inputCls} value={nome} onChange={(e) => setNome(e.target.value)} required />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Telefono</label>
+            <input className={inputCls} value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Qualifica</label>
+            <input className={inputCls} value={qualifica} onChange={(e) => setQualifica(e.target.value)} />
+          </div>
+        </div>
+        <p className="text-xs text-gray-400">
+          Ruolo, stato ed email non si modificano da qui (email non è modificabile).
+        </p>
+        {errore && <ErroreBox messaggio={errore} />}
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+            Annulla
+          </button>
+          <button type="submit" className={btnPrimary} disabled={busy}>
+            {busy ? "Salvataggio…" : "Salva"}
           </button>
         </div>
       </form>
@@ -707,6 +950,92 @@ function DialogStato({
             disabled={busy}
           >
             {busy ? "Attendere…" : disattiva ? "Disattiva" : "Riattiva"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Dialog: eliminazione FISICA utente (solo se pulito) ──────────────────────
+function DialogElimina({
+  utente,
+  onClose,
+  onDone,
+}: {
+  utente: UtenteLista;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [dip, setDip] = useState<DipendenzeUtente | null>(null);
+  const [caricando, setCaricando] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    dipendenzeUtenteAction(utente.id).then((r) => {
+      if (!vivo) return;
+      if (r.ok) setDip(r.dip);
+      else setErrore(r.error);
+      setCaricando(false);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [utente.id]);
+
+  async function conferma() {
+    setErrore(null);
+    setBusy(true);
+    const res = await eliminaUtenteFisicoAction(utente.id);
+    if (res.ok) onDone();
+    else {
+      setErrore(res.error);
+      setBusy(false);
+    }
+  }
+
+  const blocchi = dip
+    ? [
+        dip.visite ? `${dip.visite} visite` : null,
+        dip.slot ? `${dip.slot} slot` : null,
+        dip.piani ? `${dip.piani} piani` : null,
+        dip.verbali ? `${dip.verbali} verbali` : null,
+        dip.clientiCreati ? `${dip.clientiCreati} clienti creati` : null,
+        dip.template ? "riferimenti template" : null,
+        dip.audit ? "voci di audit" : null,
+      ].filter(Boolean)
+    : [];
+
+  return (
+    <Modal titolo="Elimina definitivamente" sottotitolo={`${utente.nome_completo} · ${utente.email}`} onClose={onClose}>
+      <div className="space-y-4">
+        {caricando ? (
+          <p className="text-sm text-gray-500">Verifica dei dati collegati…</p>
+        ) : dip?.eliminabile ? (
+          <p className="text-sm text-gray-600">
+            L&apos;utente non ha dati collegati. L&apos;eliminazione è definitiva e{" "}
+            <strong>non reversibile</strong>. Per un utente con storico usa invece la disattivazione.
+          </p>
+        ) : (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Non eliminabile: l&apos;utente ha {blocchi.join(", ")}. Usa la disattivazione per
+            revocargli l&apos;accesso mantenendo lo storico.
+          </p>
+        )}
+        {errore && <ErroreBox messaggio={errore} />}
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+            Annulla
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+            onClick={conferma}
+            disabled={busy || caricando || !dip?.eliminabile}
+          >
+            {busy ? "Eliminazione…" : "Elimina definitivamente"}
           </button>
         </div>
       </div>

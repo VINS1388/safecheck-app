@@ -1,4 +1,5 @@
 import { listaUtenti } from "@/lib/server/organizzazione";
+import { getProfiloOrganizzazione } from "@/lib/server/org-profilo";
 import OrganizzazioneClient from "./OrganizzazioneClient";
 
 export const metadata = { title: "Organizzazione · SafeCheck" };
@@ -9,7 +10,7 @@ export const metadata = { title: "Organizzazione · SafeCheck" };
  * riepilogo con un'unica query, poi delega l'interattività al client component.
  */
 export default async function OrganizzazionePage() {
-  const utenti = await listaUtenti();
+  const [utenti, org] = await Promise.all([listaUtenti(), getProfiloOrganizzazione()]);
 
   const riepilogo = {
     attivi: utenti.filter((u) => u.attivo).length,
@@ -18,5 +19,5 @@ export default async function OrganizzazionePage() {
     specialist: utenti.filter((u) => u.attivo && u.ruolo === "specialist").length,
   };
 
-  return <OrganizzazioneClient utenti={utenti} riepilogo={riepilogo} />;
+  return <OrganizzazioneClient utenti={utenti} riepilogo={riepilogo} organizzazione={org} />;
 }

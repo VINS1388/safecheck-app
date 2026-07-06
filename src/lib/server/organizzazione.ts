@@ -29,10 +29,10 @@ export { generaPasswordTemporanea };
 export type RuoloUtente = Enums<"ruolo_utente">; // "admin" | "specialist" | "planner"
 export type UtenteLista = Pick<
   Tables<"utenti">,
-  "id" | "email" | "nome_completo" | "ruolo" | "attivo" | "creato_il"
+  "id" | "email" | "nome_completo" | "ruolo" | "telefono" | "qualifica" | "attivo" | "creato_il"
 >;
 
-const CAMPI_LISTA = "id, email, nome_completo, ruolo, attivo, creato_il";
+const CAMPI_LISTA = "id, email, nome_completo, ruolo, telefono, qualifica, attivo, creato_il";
 const RUOLI: readonly RuoloUtente[] = ["admin", "planner", "specialist"];
 export function isRuoloValido(x: string): x is RuoloUtente {
   return (RUOLI as readonly string[]).includes(x);
@@ -163,6 +163,32 @@ export async function creaUtente(input: {
   }
 }
 
+/**
+ * Aggiorna i DATI ANAGRAFICI di un utente (admin, Sprint 16.6). Whitelist:
+ * `nome_completo`, `telefono`, `qualifica`. NON tocca mai ruolo/attivo (quelli
+ * hanno funzioni dedicate con anti-lockout) né email (fuori scope Auth).
+ */
+export async function aggiornaAnagraficaUtente(
+  userId: string,
+  input: { nome_completo: string; telefono: string | null; qualifica: string | null }
+): Promise<UtenteLista> {
+  await requireAdmin();
+  const nome = input.nome_completo.trim();
+  if (!nome) throw new OrgError("input_invalido", "Il nome è obbligatorio.");
+  const admin = createAdminClient();
+  await getUtenteById(admin, userId); // 404 se non esiste
+  const { error } = await admin
+    .from("utenti")
+    .update({
+      nome_completo: nome,
+      telefono: input.telefono?.trim() || null,
+      qualifica: input.qualifica?.trim() || null,
+    })
+    .eq("id", userId);
+  if (error) throw new OrgError("generico", error.message);
+  return getUtenteById(admin, userId);
+}
+
 /** Cambia il ruolo di un utente. Anti-lockout su retrocessione dell'ultimo admin. */
 export async function cambiaRuolo(userId: string, nuovoRuolo: RuoloUtente): Promise<UtenteLista> {
   await requireAdmin();
@@ -212,6 +238,81 @@ export async function resetPassword(userId: string): Promise<{ tempPassword: str
   const { error } = await admin.auth.admin.updateUserById(userId, { password });
   if (error) throw new OrgError("generico", error.message);
   return { tempPassword: password };
+}
+
+// ── Hard-delete utente (Sprint 16.6, STEP 6) ────────────────────────────────
+
+export interface DipendenzeUtente {
+  visite: number;
+  slot: number;
+  piani: number;
+  verbali: number;
+  clientiCreati: number;
+  template: number;
+  audit: number;
+  totale: number;
+  eliminabile: boolean;
+}
+
+/**
+ * Conta TUTTI i riferimenti a un utente (FK dirette e indirette). Se `totale === 0`
+ * l'utente è "pulito" → eliminabile fisicamente (account di test/errore). Qualsiasi
+ * riferimento — incluso storico/audit — blocca: la via corretta resta la
+ * disattivazione. Solo admin (requireAdmin).
+ */
+export async function dipendenzeUtente(userId: string): Promise<DipendenzeUtente> {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const conta = async (tab: string, col: string): Promise<number> => {
+    const { count } = await admin.from(tab).select("id", { count: "exact", head: true }).eq(col, userId);
+    return count ?? 0;
+  };
+  const visite = await conta("visite", "specialist_id");
+  const slot = await conta("visite_pianificate", "tecnico_assegnato_id");
+  const piani = await conta("piani_visite", "tecnico_assegnato_id");
+  const verbali = await conta("verbali_pdf", "generato_da");
+  const clientiCreati = await conta("clienti", "creato_da");
+  const template =
+    (await conta("template_master", "creato_da")) +
+    (await conta("template_cliente", "modificato_da")) +
+    (await conta("template_sede", "modificato_da")) +
+    (await conta("template_audit_log", "utente_id"));
+  const audit = await conta("audit_log", "utente_id");
+  const totale = visite + slot + piani + verbali + clientiCreati + template + audit;
+  return { visite, slot, piani, verbali, clientiCreati, template, audit, totale, eliminabile: totale === 0 };
+}
+
+/**
+ * Eliminazione FISICA di un utente (STEP 6, perimetro H.1). Solo se pulito
+ * (dipendenzeUtente.totale === 0). Guardrail: mai sé stessi, mai l'ultimo admin
+ * attivo (app-level + trigger 027 come rete DB sulla cascata auth.users→utenti).
+ * Ri-verifica le dipendenze server-side PRIMA del delete (non solo in UI).
+ */
+export async function eliminaUtenteFisico(userId: string): Promise<void> {
+  const chiamante = await requireAdmin();
+  if (userId === chiamante.id) throw new OrgError("input_invalido", "Non puoi eliminare il tuo stesso account.");
+
+  const admin = createAdminClient();
+  const target = await getUtenteById(admin, userId); // 404 se non esiste
+  if (target.ruolo === "admin" && target.attivo) {
+    if ((await contaAltriAdminAttivi(admin, userId)) === 0) throw new OrgError("ultimo_admin");
+  }
+
+  const dip = await dipendenzeUtente(userId);
+  if (!dip.eliminabile) {
+    throw new OrgError(
+      "input_invalido",
+      "L'utente ha dati collegati (visite, verbali, pianificazioni o storico): non è eliminabile fisicamente. Usa la disattivazione."
+    );
+  }
+
+  // deleteUser cancella auth.users → cascade su public.utenti; il trigger
+  // anti-lockout (027) è la rete finale (SC001 se togliesse l'ultimo admin).
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) {
+    if (/SC001|admin attivo/i.test(error.message)) throw new OrgError("ultimo_admin");
+    throw new OrgError("generico", error.message);
+  }
 }
 
 /**

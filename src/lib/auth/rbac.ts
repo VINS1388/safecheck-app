@@ -42,6 +42,36 @@ export async function canManageUsers(): Promise<boolean> {
 }
 
 /**
+ * Modifica dei PROPRI dati anagrafici (pagina /profilo): ogni utente autenticato
+ * e attivo, a prescindere dal ruolo. Non copre ruolo/attivo/email (fuori whitelist,
+ * vedi src/lib/server/profilo.ts) — quelli restano governance admin / fuori scope.
+ */
+export async function canEditOwnProfile(): Promise<boolean> {
+  return (await ruoloEffettivo()) !== null;
+}
+
+/**
+ * Gestione del profilo Organizzazione (scrittura): solo admin (Sprint 16.6).
+ * Semanticamente distinto da canManageUsers per la futura Fase 3 (membership
+ * per-org): la LETTURA del profilo org è invece aperta a tutti gli autenticati
+ * (gestita dove serve, non qui — questo helper è il gate di SCRITTURA).
+ */
+export async function canManageOrganizzazione(): Promise<boolean> {
+  return (await ruoloEffettivo()) === "admin";
+}
+
+/**
+ * Gate di RUOLO per l'eliminazione FISICA (hard-delete) di un'entità: solo admin.
+ * NB: è SOLO il gate di ruolo. La sicurezza reale dipende ANCHE dal check delle
+ * dipendenze dell'entità (zero dati collegati), che vive nel modulo dati e va
+ * ri-eseguito server-side prima del delete. Mirror delle policy DELETE is_admin()
+ * (clienti 002 / sedi 025) e del canale service-role per gli utenti.
+ */
+export async function canHardDelete(): Promise<boolean> {
+  return (await ruoloEffettivo()) === "admin";
+}
+
+/**
  * Governo dell'operativo: clienti, sedi, piani, slot, assegnazioni tecnico,
  * generazione cicli. admin o planner. NON copre la chiusura verbali (resta al
  * compilatore + admin) né l'eliminazione di bozze altrui.
