@@ -3,8 +3,13 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManagePlanning } from "@/lib/auth/rbac";
-import { aggiornaCliente, eliminaCliente } from "@/lib/db/queries/clienti";
+import { canManagePlanning, canHardDelete } from "@/lib/auth/rbac";
+import {
+  aggiornaCliente,
+  disattivaCliente,
+  riattivaCliente,
+  eliminaClienteFisico,
+} from "@/lib/db/queries/clienti";
 
 const ERR_PERM = encodeURIComponent("Non hai i permessi per questa operazione.");
 
@@ -43,17 +48,47 @@ export async function aggiornaClienteAction(id: string, formData: FormData) {
   redirect(`/clienti/${id}?msg=${encodeURIComponent("Cliente aggiornato.")}`);
 }
 
-/** Soft-delete del cliente (bloccato se ha visite collegate). */
-export async function eliminaClienteAction(id: string) {
+/** Disattiva il cliente (soft, reversibile — non bloccata; avviso impatti in UI). */
+export async function disattivaClienteAction(id: string) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
   if (!(await canManagePlanning())) redirect(`/clienti/${id}?err=${ERR_PERM}`);
 
-  const esito = await eliminaCliente(id);
+  const esito = await disattivaCliente(id);
   if (!esito.ok) {
-    redirect(`/clienti/${id}?err=${encodeURIComponent(esito.motivo)}`);
+    redirect(`/clienti/${id}/modifica?err=${encodeURIComponent(esito.motivo)}`);
   }
   revalidatePath("/clienti");
   revalidatePath("/dashboard");
-  redirect(`/clienti?msg=${encodeURIComponent("Cliente eliminato.")}`);
+  redirect(`/clienti?msg=${encodeURIComponent("Cliente disattivato.")}`);
+}
+
+/** Eliminazione FISICA del cliente (solo admin, solo se pulito). */
+export async function eliminaClienteFisicoAction(id: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!(await canHardDelete())) redirect(`/clienti/${id}/modifica?err=${ERR_PERM}`);
+
+  const esito = await eliminaClienteFisico(id);
+  if (!esito.ok) {
+    redirect(`/clienti/${id}/modifica?err=${encodeURIComponent(esito.motivo)}`);
+  }
+  revalidatePath("/clienti");
+  revalidatePath("/dashboard");
+  redirect(`/clienti?msg=${encodeURIComponent("Cliente eliminato definitivamente.")}`);
+}
+
+/** Riattiva un cliente disattivato. */
+export async function riattivaClienteAction(id: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${id}?err=${ERR_PERM}`);
+
+  const esito = await riattivaCliente(id);
+  revalidatePath("/clienti");
+  revalidatePath("/dashboard");
+  if (!esito.ok) {
+    redirect(`/clienti?archiviati=1&err=${encodeURIComponent(esito.motivo)}`);
+  }
+  redirect(`/clienti/${id}?msg=${encodeURIComponent("Cliente riattivato.")}`);
 }

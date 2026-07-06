@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClienteById } from "@/lib/db/queries/clienti";
+import { getSediArchiviate, dipendenzeSede } from "@/lib/db/queries/sedi";
 import { getVisiteByCliente, type VisitaRiepilogo } from "@/lib/db/queries/visite";
 import { getPianificazione, getSediConSlotProponibili } from "@/lib/db/queries/pianificazione";
+import { isAdmin } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
+import BottoneConfermaAzione from "@/components/ui/BottoneConfermaAzione";
 import AzioniVerbale from "../../visite/AzioniVerbale";
 import { nuovaVisitaAction } from "./sedi/[sedeId]/nuova-visita/actions";
-import { eliminaSedeAction, impostaSedePrincipaleAction } from "./sedi/actions";
+import {
+  disattivaSedeAction,
+  riattivaSedeAction,
+  eliminaSedeFisicaAction,
+  impostaSedePrincipaleAction,
+} from "./sedi/actions";
 
 export default async function ClienteDettaglioPage({
   params,
@@ -23,11 +31,18 @@ export default async function ClienteDettaglioPage({
   const cliente = await getClienteById(id);
   if (!cliente) notFound();
 
-  const [visite, slots, sediConSlot] = await Promise.all([
+  const [visite, slots, sediConSlot, sediArchiviate, admin] = await Promise.all([
     getVisiteByCliente(id),
     getPianificazione(),
     getSediConSlotProponibili(id),
+    getSediArchiviate(id),
+    isAdmin(),
   ]);
+  // Dipendenze delle sole sedi archiviate (per l'eliminazione fisica, solo admin).
+  const dipSedeArchiviata = new Map<string, boolean>();
+  if (admin) {
+    for (const s of sediArchiviate) dipSedeArchiviata.set(s.id, (await dipendenzeSede(s.id)).eliminabile);
+  }
   const bozze = visite.filter((v) => v.stato === "bozza").length;
   const generati = visite.filter((v) => v.stato_verbale === "chiuso").length;
 
@@ -39,12 +54,16 @@ export default async function ClienteDettaglioPage({
     if (!ultimaVisitaPerSede.has(v.sede_id)) ultimaVisitaPerSede.set(v.sede_id, v); // visite già ordinate desc
   }
   const prossimaSlotPerSede = new Map<string, { data: string; suggerita: boolean }>();
+  const slotFuturiPerSede = new Map<string, number>();
   for (const s of slots) {
-    if (s.stato === "eseguita" || prossimaSlotPerSede.has(s.sedeId)) continue; // slots già ordinati per data
-    prossimaSlotPerSede.set(s.sedeId, {
-      data: s.dataPianificata ?? s.dataSuggerita,
-      suggerita: s.dataPianificata == null,
-    });
+    if (s.stato === "eseguita") continue;
+    slotFuturiPerSede.set(s.sedeId, (slotFuturiPerSede.get(s.sedeId) ?? 0) + 1);
+    if (!prossimaSlotPerSede.has(s.sedeId)) {
+      prossimaSlotPerSede.set(s.sedeId, {
+        data: s.dataPianificata ?? s.dataSuggerita,
+        suggerita: s.dataPianificata == null,
+      });
+    }
   }
 
   const anagrafica: [string, string | null][] = [
@@ -210,25 +229,110 @@ export default async function ClienteDettaglioPage({
                       </button>
                     </form>
                   )}
-                  {nVisite > 0 ? (
-                    <span
-                      title="Non eliminabile: ci sono visite collegate (integrità storica)."
-                      className="cursor-not-allowed text-gray-300"
-                    >
-                      Elimina
-                    </span>
-                  ) : (
-                    <form action={eliminaSedeAction.bind(null, cliente.id, s.id)}>
-                      <button type="submit" className="font-medium text-red-600 hover:underline">
-                        Elimina
-                      </button>
-                    </form>
-                  )}
+                  <BottoneConfermaAzione
+                    azione={disattivaSedeAction.bind(null, cliente.id, s.id)}
+                    etichetta="Disattiva"
+                    titolo="Disattiva sede"
+                    testoConferma="Disattiva"
+                    variante="rosso"
+                    classeTrigger="font-medium text-red-600 hover:underline"
+                    messaggio={
+                      <>
+                        <p>
+                          <strong>{s.nome}</strong> verrà archiviata e non comparirà più tra le sedi
+                          attive. Operazione reversibile, nessun dato cancellato.
+                        </p>
+                        {(nVisite > 0 || (slotFuturiPerSede.get(s.id) ?? 0) > 0) && (
+                          <p className="rounded-md bg-amber-100 px-3 py-2 text-amber-900">
+                            Elementi collegati che restano nel sistema:{" "}
+                            {nVisite > 0 && (
+                              <strong>
+                                {nVisite} visit{nVisite === 1 ? "a" : "e"}
+                              </strong>
+                            )}
+                            {nVisite > 0 && (slotFuturiPerSede.get(s.id) ?? 0) > 0 && " · "}
+                            {(slotFuturiPerSede.get(s.id) ?? 0) > 0 && (
+                              <strong>
+                                {slotFuturiPerSede.get(s.id)} slot futur
+                                {slotFuturiPerSede.get(s.id) === 1 ? "o" : "i"} in pianificazione
+                              </strong>
+                            )}
+                            . La pianificazione resterà agganciata alla sede fino alla riattivazione.
+                          </p>
+                        )}
+                      </>
+                    }
+                  />
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Sedi archiviate (disattivate) */}
+      {sediArchiviate.length > 0 && (
+        <details className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-gray-600">
+            Sedi archiviate ({sediArchiviate.length})
+          </summary>
+          <div className="mt-3 space-y-2">
+            {sediArchiviate.map((s) => (
+              <div
+                key={s.id}
+                className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 font-medium text-gray-700">
+                    {s.nome}
+                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Archiviata
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {s.indirizzo}
+                    {s.citta ? `, ${s.citta}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <form action={riattivaSedeAction.bind(null, cliente.id, s.id)}>
+                    <button
+                      type="submit"
+                      className="rounded-md border border-green-300 bg-white px-3 py-1.5 text-sm font-medium text-green-700 transition hover:bg-green-600 hover:text-white"
+                    >
+                      Riattiva
+                    </button>
+                  </form>
+                  {admin &&
+                    (dipSedeArchiviata.get(s.id) ? (
+                      <BottoneConfermaAzione
+                        azione={eliminaSedeFisicaAction.bind(null, cliente.id, s.id)}
+                        etichetta="Elimina"
+                        titolo="Eliminare definitivamente la sede?"
+                        testoConferma="Elimina definitivamente"
+                        variante="rosso"
+                        classeTrigger="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-600 hover:text-white"
+                        messaggio={
+                          <p>
+                            <strong>{s.nome}</strong> verrà rimossa definitivamente dal database.
+                            L&apos;operazione <strong>non è reversibile</strong>. La sede non ha
+                            elementi collegati.
+                          </p>
+                        }
+                      />
+                    ) : (
+                      <span
+                        title="Non eliminabile: la sede ha elementi collegati (visite/piani/slot)."
+                        className="cursor-not-allowed rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-300"
+                      >
+                        Elimina
+                      </span>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Verbali */}

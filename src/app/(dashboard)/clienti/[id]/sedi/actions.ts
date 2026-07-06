@@ -3,10 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManagePlanning } from "@/lib/auth/rbac";
+import { canManagePlanning, canHardDelete } from "@/lib/auth/rbac";
 import {
   aggiornaSede,
-  eliminaSede,
+  disattivaSede,
+  riattivaSede,
+  eliminaSedeFisica,
   impostaSedePrincipale,
 } from "@/lib/db/queries/sedi";
 
@@ -44,18 +46,46 @@ export async function aggiornaSedeAction(clienteId: string, sedeId: string, form
   redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede aggiornata.")}`);
 }
 
-/** Soft-delete di una sede (bloccato se ha visite collegate). */
-export async function eliminaSedeAction(clienteId: string, sedeId: string) {
+/** Disattiva una sede (soft, reversibile — non bloccata; avviso impatti in UI). */
+export async function disattivaSedeAction(clienteId: string, sedeId: string) {
   const { user } = await getCurrentUser();
   if (!user) redirect("/login");
   if (!(await canManagePlanning())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
 
-  const esito = await eliminaSede(sedeId);
+  const esito = await disattivaSede(sedeId);
   revalidatePath(`/clienti/${clienteId}`);
   if (!esito.ok) {
     redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
   }
-  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede eliminata.")}`);
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede disattivata.")}`);
+}
+
+/** Riattiva una sede disattivata. */
+export async function riattivaSedeAction(clienteId: string, sedeId: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!(await canManagePlanning())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
+
+  const esito = await riattivaSede(sedeId);
+  revalidatePath(`/clienti/${clienteId}`);
+  if (!esito.ok) {
+    redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
+  }
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede riattivata.")}`);
+}
+
+/** Eliminazione FISICA della sede (solo admin, solo se pulita). */
+export async function eliminaSedeFisicaAction(clienteId: string, sedeId: string) {
+  const { user } = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!(await canHardDelete())) redirect(`/clienti/${clienteId}?err=${ERR_PERM}`);
+
+  const esito = await eliminaSedeFisica(sedeId);
+  revalidatePath(`/clienti/${clienteId}`);
+  if (!esito.ok) {
+    redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
+  }
+  redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede eliminata definitivamente.")}`);
 }
 
 /** Imposta la sede come principale per il cliente. */

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getClienteById } from "@/lib/db/queries/clienti";
-import { aggiornaClienteAction, eliminaClienteAction } from "../actions";
+import { getClienteById, contaVisiteCliente, dipendenzeCliente } from "@/lib/db/queries/clienti";
+import { isAdmin } from "@/lib/auth/rbac";
+import {
+  aggiornaClienteAction,
+  disattivaClienteAction,
+  eliminaClienteFisicoAction,
+} from "../actions";
+import BottoneConfermaAzione from "@/components/ui/BottoneConfermaAzione";
 
 const inputCls =
   "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
@@ -16,7 +22,12 @@ export default async function ModificaClientePage({
   const cliente = await getClienteById(id);
   if (!cliente) notFound();
 
-  const nVisite = cliente.sedi.length; // info; il blocco vero è server-side sulle visite
+  const nSediAttive = cliente.sedi.length; // getClienteById risolve solo le sedi attive
+  const [nVisite, admin, dip] = await Promise.all([
+    contaVisiteCliente(id),
+    isAdmin(),
+    dipendenzeCliente(id),
+  ]);
 
   return (
     <main className="mx-auto max-w-2xl">
@@ -111,23 +122,95 @@ export default async function ModificaClientePage({
         </div>
       </form>
 
-      {/* Zona pericolo: eliminazione (soft-delete, bloccata se ci sono visite) */}
-      <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-5">
-        <h2 className="text-sm font-semibold text-red-800">Elimina cliente</h2>
-        <p className="mt-1 text-xs text-red-700">
-          Il cliente viene disattivato e rimosso dagli elenchi. Operazione
-          bloccata se esistono visite collegate (integrità storica dei verbali).
-          {nVisite > 0 ? ` Sedi operative associate: ${nVisite}.` : ""}
+      {/* Zona gestione: disattivazione (soft, reversibile — archiviazione) */}
+      <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
+        <h2 className="text-sm font-semibold text-amber-900">Disattiva cliente</h2>
+        <p className="mt-1 text-xs text-amber-800">
+          Il cliente viene archiviato e rimosso dagli elenchi attivi. Non viene
+          cancellato nulla: puoi riattivarlo in qualsiasi momento dalla vista
+          &laquo;Archiviati&raquo;.
         </p>
-        <form action={eliminaClienteAction.bind(null, id)} className="mt-3">
-          <button
-            type="submit"
-            className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-600 hover:text-white"
-          >
-            Elimina cliente
-          </button>
-        </form>
+        <div className="mt-3">
+          <BottoneConfermaAzione
+            azione={disattivaClienteAction.bind(null, id)}
+            etichetta="Disattiva cliente"
+            titolo="Disattiva cliente"
+            testoConferma="Disattiva"
+            variante="rosso"
+            classeTrigger="rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-600 hover:text-white"
+            messaggio={
+              <>
+                <p>
+                  <strong>{cliente.ragione_sociale}</strong> verrà archiviato e non comparirà più
+                  negli elenchi attivi. L&apos;operazione è reversibile.
+                </p>
+                {(nSediAttive > 0 || nVisite > 0) && (
+                  <p className="rounded-md bg-amber-100 px-3 py-2 text-amber-900">
+                    Elementi collegati che resteranno nel sistema:{" "}
+                    {nSediAttive > 0 && (
+                      <strong>
+                        {nSediAttive} sed{nSediAttive === 1 ? "e attiva" : "i attive"}
+                      </strong>
+                    )}
+                    {nSediAttive > 0 && nVisite > 0 && " · "}
+                    {nVisite > 0 && (
+                      <strong>
+                        {nVisite} visit{nVisite === 1 ? "a" : "e"}
+                      </strong>
+                    )}
+                    . Non verranno eliminati; torneranno accessibili alla riattivazione.
+                  </p>
+                )}
+              </>
+            }
+          />
+        </div>
       </div>
+
+      {/* Eliminazione FISICA — solo admin, solo se il cliente è pulito */}
+      {admin && (
+        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-5">
+          <h2 className="text-sm font-semibold text-red-800">Elimina definitivamente</h2>
+          {dip.eliminabile ? (
+            <>
+              <p className="mt-1 text-xs text-red-700">
+                Il cliente non ha elementi collegati. L&apos;eliminazione è definitiva e non
+                reversibile.
+              </p>
+              <div className="mt-3">
+                <BottoneConfermaAzione
+                  azione={eliminaClienteFisicoAction.bind(null, id)}
+                  etichetta="Elimina definitivamente"
+                  titolo="Eliminare definitivamente il cliente?"
+                  testoConferma="Elimina definitivamente"
+                  variante="rosso"
+                  classeTrigger="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-600 hover:text-white"
+                  messaggio={
+                    <p>
+                      <strong>{cliente.ragione_sociale}</strong> verrà rimosso definitivamente dal
+                      database. L&apos;operazione <strong>non è reversibile</strong>. Se vuoi solo
+                      nasconderlo, usa invece la disattivazione.
+                    </p>
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-red-700">
+              Non eliminabile: il cliente ha elementi collegati
+              {[
+                dip.sedi ? `${dip.sedi} sedi` : null,
+                dip.visite ? `${dip.visite} visite` : null,
+                dip.templateCliente || dip.templateSede ? "template" : null,
+                dip.scadenze ? `${dip.scadenze} scadenze` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              . Usa la disattivazione per archiviarlo.
+            </p>
+          )}
+        </div>
+      )}
     </main>
   );
 }

@@ -101,31 +101,105 @@ export async function contaVisiteSede(sedeId: string): Promise<number> {
   return count ?? 0;
 }
 
+/** Slot di pianificazione FUTURI (stato <> 'eseguita') collegati a una sede. */
+export async function contaSlotFuturiSede(sedeId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("visite_pianificate")
+    .select("id", { count: "exact", head: true })
+    .eq("sede_id", sedeId)
+    .neq("stato", "eseguita");
+  return count ?? 0;
+}
+
 /**
- * Elimina (soft-delete: `attiva=false`) una sede, SOLO se non ha visite
- * collegate — l'integrità storica dei verbali non va mai rotta.
+ * Disattiva (soft: `attiva=false`) una sede. Sprint 16.6: SEMPRE consentita e
+ * reversibile — non cancella nulla, non è bloccata da visite né dal piano/slot
+ * (l'avviso impatti è informativo, mostrato in UI prima della conferma). Il blocco
+ * per dipendenze resta sull'eliminazione FISICA (hard-delete), non su questa.
  */
-export async function eliminaSede(sedeId: string): Promise<EsitoOperazione> {
-  const nVisite = await contaVisiteSede(sedeId);
-  if (nVisite > 0) {
+export async function disattivaSede(sedeId: string): Promise<EsitoOperazione> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("sedi").update({ attiva: false }).eq("id", sedeId);
+  if (error) return { ok: false, motivo: `Errore disattivazione sede: ${error.message}` };
+  return { ok: true };
+}
+
+/** Riattiva una sede precedentemente disattivata (`attiva=true`). */
+export async function riattivaSede(sedeId: string): Promise<EsitoOperazione> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("sedi").update({ attiva: true }).eq("id", sedeId);
+  if (error) return { ok: false, motivo: `Errore riattivazione sede: ${error.message}` };
+  return { ok: true };
+}
+
+// ── Hard-delete sede (Sprint 16.6, STEP 6) ──────────────────────────────────
+
+export interface DipendenzeSede {
+  visite: number;
+  piani: number;
+  slot: number;
+  templateSede: number;
+  scadenze: number;
+  totale: number;
+  eliminabile: boolean;
+}
+
+/**
+ * Conta i riferimenti a una sede. `totale === 0` → eliminabile fisicamente.
+ * NON conta `moduli_sede`: è un figlio di CONFIGURAZIONE auto-generato (modulo base),
+ * non storico — verrà rimosso esplicitamente in eliminaSedeFisica.
+ */
+export async function dipendenzeSede(sedeId: string): Promise<DipendenzeSede> {
+  const supabase = await createClient();
+  const conta = async (tab: string, col: string): Promise<number> => {
+    const { count } = await supabase.from(tab).select("id", { count: "exact", head: true }).eq(col, sedeId);
+    return count ?? 0;
+  };
+  const visite = await conta("visite", "sede_id");
+  const piani = await conta("piani_visite", "sede_id");
+  const slot = await conta("visite_pianificate", "sede_id");
+  const templateSede = await conta("template_sede", "sede_id");
+  const scadenze = await conta("scadenze", "sede_id");
+  const totale = visite + piani + slot + templateSede + scadenze;
+  return { visite, piani, slot, templateSede, scadenze, totale, eliminabile: totale === 0 };
+}
+
+/**
+ * Eliminazione FISICA di una sede (STEP 6). Solo se pulita (zero visite/piani/slot/
+ * template/scadenze). Un SINGOLO `DELETE FROM sedi`: atomico. L'unico figlio residuo
+ * possibile è `moduli_sede` (config base auto-generata) — il pre-check dipendenze
+ * garantisce che tutti gli altri figli-cascade (piani/slot/template) e i figli
+ * RESTRICT (visite/scadenze) siano assenti — e viene rimosso dal CASCADE ESISTENTE
+ * `moduli_sede → sedi` (migration 028; non è un cascade nuovo). RLS: sedi_delete_admin
+ * (is_admin). Ri-verifica le dipendenze PRIMA del delete.
+ */
+export async function eliminaSedeFisica(sedeId: string): Promise<EsitoOperazione> {
+  const dip = await dipendenzeSede(sedeId);
+  if (!dip.eliminabile) {
     return {
       ok: false,
-      motivo: `La sede ha ${nVisite} visit${nVisite === 1 ? "a" : "e"} collegat${
-        nVisite === 1 ? "a" : "e"
-      }: non può essere eliminata (integrità storica dei verbali).`,
+      motivo:
+        "La sede ha elementi collegati (visite, piani, slot, template o scadenze): non è eliminabile fisicamente. Usa la disattivazione.",
     };
   }
-
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("sedi")
-    .update({ attiva: false })
-    .eq("id", sedeId);
-
-  if (error) {
-    return { ok: false, motivo: `Errore eliminazione sede: ${error.message}` };
-  }
+  const { error } = await supabase.from("sedi").delete().eq("id", sedeId);
+  if (error) return { ok: false, motivo: `Errore eliminazione sede: ${error.message}` };
   return { ok: true };
+}
+
+/** Sedi ARCHIVIATE (attiva=false) di un cliente — vista "Archiviate". */
+export async function getSediArchiviate(clienteId: string): Promise<Sede[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sedi")
+    .select("*")
+    .eq("cliente_id", clienteId)
+    .eq("attiva", false)
+    .order("nome", { ascending: true });
+  if (error || !data) return [];
+  return data as Sede[];
 }
 
 /**
