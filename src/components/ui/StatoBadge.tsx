@@ -1,9 +1,11 @@
-import { cn } from "@/lib/utils";
+import Badge, { type BadgeTone } from "./Badge";
 
 // Badge di stato verbale condiviso (Sprint 15.1). Gerarchia cromatica unica:
 //   grigio (bozza/incompleto) → verde (chiuso/fatto) → grigio scuro (sostituito).
 // Usato in dashboard, archivio, scheda cliente, scheda sede — un solo punto di
 // verità per i colori (elimina il BadgeVerbale duplicato per copia-incolla).
+// Da S2 delega la geometria pill + i colori alla primitiva `Badge` (output
+// invariato: bozza=neutral, chiuso=success, sostituito=archived).
 
 export type StatoVerbaleUI = "bozza" | "chiuso" | "sostituito";
 
@@ -17,10 +19,12 @@ export function statoVerbaleUI(v: {
   return "bozza";
 }
 
-const STILE: Record<StatoVerbaleUI, string> = {
-  bozza: "bg-gray-100 text-gray-600",
-  chiuso: "bg-green-100 text-green-700",
-  sostituito: "bg-slate-600 text-white",
+// Mappa lo stato verbale sui `tone` semantici della primitiva Badge.
+// Output identico al precedente STILE inline (neutral/success/archived).
+const TONE: Record<StatoVerbaleUI, BadgeTone> = {
+  bozza: "neutral",
+  chiuso: "success",
+  sostituito: "archived",
 };
 
 interface Props {
@@ -41,15 +45,8 @@ export default function StatoBadge({ statoVerbale, numeroVerbale, className }: P
   const titolo =
     stato === "sostituito" ? "Verbale sostituito — non più valido" : undefined;
   return (
-    <span
-      title={titolo}
-      className={cn(
-        "inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold",
-        STILE[stato],
-        className
-      )}
-    >
+    <Badge tone={TONE[stato]} title={titolo} className={className}>
       {testo}
-    </span>
+    </Badge>
   );
 }
