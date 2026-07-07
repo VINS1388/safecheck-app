@@ -11,6 +11,8 @@ import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import BadgeModulo from "@/components/ui/BadgeModulo";
 import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
+import DataTable, { type Column } from "@/components/ui/DataTable";
 import FilterBar, { type FilterConfig } from "@/components/filters/FilterBar";
 import AzioniVerbale from "./AzioniVerbale";
 
@@ -65,12 +67,47 @@ export default async function VisitePage({
   const conFiltri =
     !!filtri.cliente || !!filtri.sede || !!filtri.tecnico || !!filtri.stato || !!filtri.criticita || filtri.periodo !== "sempre";
 
+  const mostraModulo = moduli.length > 1;
+
+  // Colonne tabella desktop — stessa struttura/ordine/dati del render precedente.
+  const columns: Column<VisitaRiepilogo>[] = [
+    {
+      header: "Stato",
+      cell: (v) => <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />,
+    },
+    {
+      header: "Azienda",
+      className: "font-medium text-gray-900",
+      cell: (v) => (
+        <span className="inline-flex items-center gap-2">
+          {v.cliente_nome}
+          <BadgeModulo nomeBreve={v.moduloNomeBreve ?? ""} famiglia={v.moduloFamiglia} mostra={mostraModulo} />
+        </span>
+      ),
+    },
+    { header: "Sede", className: "text-gray-700", cell: (v) => v.sede_nome },
+    { header: "Data", className: "text-gray-700", cell: (v) => formatDate(v.data_visita) },
+    {
+      header: "Azioni",
+      align: "right",
+      cell: (v) => <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />,
+    },
+  ];
+
+  const vuoto = conFiltri ? (
+    <EmptyState titolo="Nessun risultato" descrizione="Nessuna visita corrisponde ai filtri selezionati." compatto />
+  ) : (
+    <EmptyState
+      titolo="Nessuna visita"
+      descrizione="Apri la scheda di un cliente e avvia una nuova visita da una delle sue sedi."
+      ctaHref="/clienti"
+      ctaLabel="Vai ai clienti"
+    />
+  );
+
   return (
     <main>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Archivio verbali</h1>
-        <p className="text-sm text-gray-600">Sopralluoghi di sicurezza in corso e conclusi.</p>
-      </div>
+      <PageHeader titolo="Archivio verbali" sottotitolo="Sopralluoghi di sicurezza in corso e conclusi." />
 
       <FilterBar
         config={config}
@@ -82,62 +119,13 @@ export default async function VisitePage({
         periodoDefault="sempre"
       />
 
-      {visite.length === 0 ? (
-        conFiltri ? (
-          <EmptyState titolo="Nessun risultato" descrizione="Nessuna visita corrisponde ai filtri selezionati." compatto />
-        ) : (
-          <EmptyState
-            titolo="Nessuna visita"
-            descrizione="Apri la scheda di un cliente e avvia una nuova visita da una delle sue sedi."
-            ctaHref="/clienti"
-            ctaLabel="Vai ai clienti"
-          />
-        )
-      ) : (
-        <>
-          {/* Card stack — mobile */}
-          <div className="space-y-3 sm:hidden">
-            {visite.map((v) => (
-              <VisitaCard key={v.id} v={v} mostraModulo={moduli.length > 1} />
-            ))}
-          </div>
-
-          {/* Tabella — desktop */}
-          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:block">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Stato</th>
-                  <th className="px-4 py-3 font-medium">Azienda</th>
-                  <th className="px-4 py-3 font-medium">Sede</th>
-                  <th className="px-4 py-3 font-medium">Data</th>
-                  <th className="px-4 py-3 text-right font-medium">Azioni</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {visite.map((v) => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      <span className="inline-flex items-center gap-2">
-                        {v.cliente_nome}
-                        <BadgeModulo nomeBreve={v.moduloNomeBreve ?? ""} famiglia={v.moduloFamiglia} mostra={moduli.length > 1} />
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{v.sede_nome}</td>
-                    <td className="px-4 py-3 text-gray-700">{formatDate(v.data_visita)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <DataTable
+        columns={columns}
+        rows={visite}
+        keyOf={(v) => v.id}
+        renderCard={(v) => <VisitaCard v={v} mostraModulo={mostraModulo} />}
+        vuoto={vuoto}
+      />
     </main>
   );
 }

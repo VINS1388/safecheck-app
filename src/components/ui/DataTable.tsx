@@ -42,11 +42,12 @@ export default function DataTable<T>({
 
   return (
     <div className={className}>
-      {/* Desktop: tabella */}
-      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
+      {/* Desktop: tabella (skeleton canonico del progetto: header grigio senza
+          bordo inferiore, righe con divide-y, wrapper con shadow-sm come Card). */}
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:block">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               {columns.map((c, i) => (
                 <th
                   key={i}
