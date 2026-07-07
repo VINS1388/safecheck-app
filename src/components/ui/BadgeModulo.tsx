@@ -11,7 +11,7 @@ interface Props {
 }
 
 const STILE = {
-  sicurezza: "bg-[#1e3a5f]/10 text-[#1e3a5f]",
+  sicurezza: "bg-brand/10 text-brand",
   haccp: "bg-teal-100 text-teal-700",
 } as const;
 

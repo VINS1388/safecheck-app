@@ -23,7 +23,7 @@ export default function EmptyState({ titolo, descrizione, ctaHref, ctaLabel, com
       {ctaHref && ctaLabel && (
         <Link
           href={ctaHref}
-          className="mt-4 inline-block min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+          className="mt-4 inline-block min-h-[40px] rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
         >
           {ctaLabel}
         </Link>

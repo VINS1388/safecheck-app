@@ -60,7 +60,7 @@ export default function ServiziAttivi({
                 disabled={busy === m.id}
                 onClick={() => toggle(m.id, !m.attivoSede)}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition disabled:opacity-50 ${
-                  m.attivoSede ? "bg-[#1e3a5f]" : "bg-gray-300"
+                  m.attivoSede ? "bg-brand" : "bg-gray-300"
                 }`}
                 title={m.attivoSede ? "Attivo — clicca per disattivare" : "Disattivato — clicca per attivare"}
               >

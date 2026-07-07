@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* ── Design tokens SafeCheck — Sprint 16.5 · S1 (Fondazione token) ──────────
+   Il navy di brand vive qui, non più come letterale hex sparso nelle classi.
+   `bg-brand`, `text-brand`, `border-brand`, `focus:ring-brand` e i modificatori
+   d'opacità (`bg-brand/10`, `border-brand/30`…) sono generati da questi token.
+   Resa INVARIATA: i valori sono identici agli hex precedenti.
+
+   Scala ruoli (decisione Sprint 16.5): admin = brand (navy pieno) · planner =
+   brand-soft (navy intermedio) · specialist = brand tenue (bg `brand/10`, testo
+   `brand`) · utente disattivato = grigio neutro (è uno STATO che sovrascrive la
+   tinta ruolo, non un colore-ruolo). L'applicazione ai badge arriva in S2 —
+   qui i token sono solo definiti. Verde/ambra/rosso restano riservati ai soli
+   stati operativi (ok / attenzione / criticità), mai per distinguere ruoli. */
+@theme {
+  --color-brand: #1e3a5f;        /* navy pieno · primari, nav, accenti · ruolo ADMIN */
+  --color-brand-hover: #16304e;  /* hover dei bottoni primari */
+  --color-brand-soft: #2c5480;   /* navy intermedio · gradient · ruolo PLANNER (S2) */
+}
+
 :root {
   --background: #f8f9fa;
   --foreground: #171717;

@@ -34,7 +34,7 @@ export default function BottoneConfermaAzione({
   const btnConferma =
     variante === "rosso"
       ? "inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-      : "inline-flex items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e]";
+      : "inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover";
 
   return (
     <>
@@ -45,7 +45,7 @@ export default function BottoneConfermaAzione({
         onClick={() => setAperto(true)}
         className={
           classeTrigger ??
-          "font-medium text-[#1e3a5f] hover:underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline"
+          "font-medium text-brand hover:underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline"
         }
       >
         {etichetta}

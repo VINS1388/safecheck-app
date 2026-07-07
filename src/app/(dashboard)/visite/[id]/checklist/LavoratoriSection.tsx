@@ -17,7 +17,7 @@ const LIVELLI: { key: LivelloRischio; label: string; sel: string }[] = [
 ];
 
 const INPUT =
-  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50";
+  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50";
 
 function nuovoId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -170,7 +170,7 @@ export default function LavoratoriSection({ lavoratori, disabled, onChange }: Pr
 
       {/* Form inline per aggiungere un lavoratore */}
       {!disabled && bozza && (
-        <div className="mt-3 rounded-lg border border-[#1e3a5f]/30 bg-[#1e3a5f]/5 p-3">
+        <div className="mt-3 rounded-lg border border-brand/30 bg-brand/5 p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-gray-700">
@@ -221,7 +221,7 @@ export default function LavoratoriSection({ lavoratori, disabled, onChange }: Pr
               type="button"
               onClick={confermaBozza}
               disabled={!bozzaValida}
-              className="rounded-md bg-[#1e3a5f] px-3 py-1.5 text-xs font-semibold text-white transition enabled:hover:bg-[#16304e] disabled:opacity-40"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white transition enabled:hover:bg-brand-hover disabled:opacity-40"
             >
               Aggiungi lavoratore
             </button>
@@ -240,7 +240,7 @@ export default function LavoratoriSection({ lavoratori, disabled, onChange }: Pr
         <button
           type="button"
           onClick={() => setBozza({ ...BOZZA_VUOTA })}
-          className="mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-[#1e3a5f] transition hover:border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/5"
+          className="mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-brand transition hover:border-brand/50 hover:bg-brand/5"
         >
           + Aggiungi lavoratore
         </button>

@@ -18,7 +18,7 @@ interface Props {
 const CADENZE = [1, 2, 3, 4, 6, 12];
 
 const INPUT =
-  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 
 const BADGE_SLOT: Record<StatoSlot, string> = {
   da_pianificare: "bg-gray-100 text-gray-600",
@@ -107,7 +107,7 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
                 className={cn(
                   "min-h-[40px] min-w-[48px] rounded-lg border px-3 text-sm font-semibold transition",
                   visiteAnno === n
-                    ? "border-[#1e3a5f] bg-[#1e3a5f] text-white"
+                    ? "border-brand bg-brand text-white"
                     : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                 )}
               >
@@ -139,7 +139,7 @@ export default function PianoVisiteForm({ clienteId, sedeId, piano, tecnici, slo
             type="button"
             onClick={salva}
             disabled={salvando}
-            className="min-h-[44px] rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition enabled:hover:bg-[#16304e] disabled:opacity-50"
+            className="min-h-[44px] rounded-lg bg-brand px-5 text-sm font-semibold text-white transition enabled:hover:bg-brand-hover disabled:opacity-50"
           >
             {salvando ? "Salvataggio…" : piano ? "Aggiorna piano" : "Salva piano"}
           </button>

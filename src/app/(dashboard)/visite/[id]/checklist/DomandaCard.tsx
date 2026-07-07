@@ -30,7 +30,7 @@ const STILE_SELEZIONATO: Record<EsitoRisposta, string> = {
 
 // Stile comune dei campi testo (padding 12px, font 16px su mobile via globals.css).
 const TEXTAREA_BASE =
-  "mt-1 w-full rounded-lg border px-3 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50";
+  "mt-1 w-full rounded-lg border px-3 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50";
 
 export interface DomandaCardProps {
   domanda: DomandaTemplate;
@@ -131,7 +131,7 @@ export default function DomandaCard({
     >
       {/* Titolo breve HACCP (heading), quando presente nel template. */}
       {domanda.titolo?.trim() && (
-        <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-[#1e3a5f]">
+        <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-brand">
           {domanda.titolo}
         </p>
       )}
@@ -174,7 +174,7 @@ export default function DomandaCard({
           <button
             type="button"
             onClick={() => setGuidaAperta((v) => !v)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[#1e3a5f] hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
             aria-expanded={guidaAperta}
           >
             <span aria-hidden>{guidaAperta ? "▾" : "▸"}</span>
@@ -276,7 +276,7 @@ export default function DomandaCard({
             value={dataVerifica}
             onChange={(e) => onDataVerifica?.(e.target.value)}
             disabled={disabled}
-            className="mt-1 min-h-[44px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50"
+            className="mt-1 min-h-[44px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50"
           />
         </div>
       )}

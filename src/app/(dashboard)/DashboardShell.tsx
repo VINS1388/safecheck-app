@@ -57,7 +57,7 @@ export default function DashboardShell({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar desktop */}
-      <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col bg-[#1e3a5f] text-white sm:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col bg-brand text-white sm:flex">
         <div className="px-5 py-5">
           <span className="text-xl font-bold tracking-tight">SafeCheck</span>
           <p className="mt-0.5 text-[11px] text-white/60">Sicurezza sul lavoro</p>
@@ -67,7 +67,7 @@ export default function DashboardShell({
       </aside>
 
       {/* Top bar mobile */}
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-[#1e3a5f] px-4 py-3 text-white sm:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-brand px-4 py-3 text-white sm:hidden">
         <span className="text-lg font-bold tracking-tight">SafeCheck</span>
         <button
           type="button"
@@ -90,7 +90,7 @@ export default function DashboardShell({
             className="absolute inset-0 bg-black/40"
             onClick={() => setAperto(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-[#1e3a5f] text-white shadow-xl">
+          <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-brand text-white shadow-xl">
             <div className="flex items-center justify-between px-5 py-5">
               <span className="text-xl font-bold tracking-tight">SafeCheck</span>
               <button

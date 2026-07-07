@@ -28,7 +28,7 @@ export default async function ClientiPage({
         {canManage && !vistaArchiviati && (
           <Link
             href="/clienti/nuovo"
-            className="flex min-h-[44px] flex-shrink-0 items-center rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="flex min-h-[44px] flex-shrink-0 items-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             + Nuovo cliente
           </Link>
@@ -47,7 +47,7 @@ export default async function ClientiPage({
         <div className="mb-4">
           <Link
             href={vistaArchiviati ? "/clienti" : "/clienti?archiviati=1"}
-            className="text-sm font-medium text-[#1e3a5f] hover:underline"
+            className="text-sm font-medium text-brand hover:underline"
           >
             {vistaArchiviati ? "← Torna ai clienti attivi" : "Mostra archiviati"}
           </Link>
@@ -69,7 +69,7 @@ export default async function ClientiPage({
           {canManage && !vistaArchiviati && (
             <Link
               href="/clienti/nuovo"
-              className="mt-4 inline-block min-h-[44px] rounded-lg bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+              className="mt-4 inline-block min-h-[44px] rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
             >
               + Nuovo cliente
             </Link>
@@ -153,7 +153,7 @@ export default async function ClientiPage({
                       ) : (
                         <Link
                           href={`/clienti/${c.id}`}
-                          className="font-medium text-[#1e3a5f] hover:underline"
+                          className="font-medium text-brand hover:underline"
                         >
                           Apri
                         </Link>

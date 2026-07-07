@@ -17,7 +17,7 @@ export default function AccountDisattivatoPage() {
         <form action={logoutAction} className="mt-5">
           <button
             type="submit"
-            className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="min-h-[44px] w-full rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Esci
           </button>

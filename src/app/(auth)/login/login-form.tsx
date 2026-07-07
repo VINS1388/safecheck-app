@@ -9,7 +9,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="mt-2 w-full rounded-md bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16304f] disabled:cursor-not-allowed disabled:opacity-60"
+      className="mt-2 w-full rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16304f] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "Accesso in corso…" : "Accedi"}
     </button>
@@ -32,7 +32,7 @@ export function LoginForm() {
           required
           autoComplete="email"
           placeholder="nome@azienda.it"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </label>
 
@@ -44,7 +44,7 @@ export function LoginForm() {
           required
           autoComplete="current-password"
           placeholder="••••••••"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </label>
 

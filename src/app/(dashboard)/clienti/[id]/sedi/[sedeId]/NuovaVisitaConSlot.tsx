@@ -83,7 +83,7 @@ export default function NuovaVisitaConSlot({ clienteId, sedeId, slots, currentUs
         {slots.map((s) => (
           <label
             key={s.id}
-            className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-2.5 text-sm hover:bg-gray-50 has-[:checked]:border-[#1e3a5f] has-[:checked]:bg-[#1e3a5f]/5"
+            className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-2.5 text-sm hover:bg-gray-50 has-[:checked]:border-brand has-[:checked]:bg-brand/5"
           >
             <input
               type="radio"
@@ -110,7 +110,7 @@ export default function NuovaVisitaConSlot({ clienteId, sedeId, slots, currentUs
           </label>
         ))}
 
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2.5 text-sm hover:bg-gray-50 has-[:checked]:border-[#1e3a5f] has-[:checked]:bg-[#1e3a5f]/5">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2.5 text-sm hover:bg-gray-50 has-[:checked]:border-brand has-[:checked]:bg-brand/5">
           <input
             type="radio"
             name="slot"
@@ -131,7 +131,7 @@ export default function NuovaVisitaConSlot({ clienteId, sedeId, slots, currentUs
             {moduli.map((m) => (
               <label
                 key={m.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 has-[:checked]:border-[#1e3a5f] has-[:checked]:bg-[#1e3a5f]/5"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 has-[:checked]:border-brand has-[:checked]:bg-brand/5"
               >
                 <input
                   type="radio"
@@ -162,7 +162,7 @@ export default function NuovaVisitaConSlot({ clienteId, sedeId, slots, currentUs
           type="button"
           onClick={avvia}
           disabled={creando || !scelta || moduloMancante}
-          className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition enabled:hover:bg-[#16304e] disabled:opacity-50"
+          className="min-h-[40px] rounded-lg bg-brand px-4 text-sm font-semibold text-white transition enabled:hover:bg-brand-hover disabled:opacity-50"
         >
           {creando ? "Creazione…" : "Nuova visita"}
         </button>

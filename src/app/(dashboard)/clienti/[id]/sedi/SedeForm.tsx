@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Sede } from "@/lib/db/queries/sedi";
 
 const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 
 /**
  * Form condiviso creazione/modifica sede operativa. `action` è la server
@@ -125,7 +125,7 @@ export default function SedeForm({
         </Link>
         <button
           type="submit"
-          className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+          className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
         >
           {submitLabel}
         </button>

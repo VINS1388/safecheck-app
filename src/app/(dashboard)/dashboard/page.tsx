@@ -182,7 +182,7 @@ function BozzaItem({ b }: { b: BozzaRiga }) {
             {b.vecchia && <span className="ml-1 font-medium text-amber-600">· aperta da {b.giorni} giorni</span>}
           </p>
         </div>
-        <span className="flex-shrink-0 rounded-lg bg-[#1e3a5f] px-3 py-1.5 text-xs font-semibold text-white">Riprendi</span>
+        <span className="flex-shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white">Riprendi</span>
       </Link>
     </li>
   );
@@ -212,7 +212,7 @@ function ChiusaItem({ v }: { v: VisitaRiga }) {
       </div>
       <div className="flex flex-shrink-0 items-center gap-3">
         <StatoBadge statoVerbale={v.statoVerbale} numeroVerbale={v.numeroVerbale} />
-        <Link href={`/visite/${v.id}/riepilogo`} className="text-sm font-medium text-[#1e3a5f] hover:underline">Apri</Link>
+        <Link href={`/visite/${v.id}/riepilogo`} className="text-sm font-medium text-brand hover:underline">Apri</Link>
       </div>
     </li>
   );
@@ -240,7 +240,7 @@ function CaricoItem({ t }: { t: CaricoRiga }) {
     <li>
       <Link href={`/pianificazione?tecnico=${t.tecnicoId}`} className="flex min-h-[48px] items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50">
         <p className="truncate text-sm font-medium text-gray-900">{t.tecnicoNome}</p>
-        <span className="flex-shrink-0 rounded-full bg-[#1e3a5f]/10 px-2.5 py-0.5 text-xs font-semibold text-[#1e3a5f]">{t.assegnate} visite</span>
+        <span className="flex-shrink-0 rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-semibold text-brand">{t.assegnate} visite</span>
       </Link>
     </li>
   );
@@ -253,7 +253,7 @@ function CTA({ href, children, primario }: { href: string; children: React.React
       href={href}
       className={
         primario
-          ? "flex min-h-[44px] items-center rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+          ? "flex min-h-[44px] items-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover"
           : "flex min-h-[44px] items-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
       }
     >
@@ -286,7 +286,7 @@ function Blocco({
           {sottotitolo && <p className="text-xs text-gray-400">{sottotitolo}</p>}
         </div>
         {href && (
-          <Link href={href} className="flex-shrink-0 text-xs font-medium text-[#1e3a5f] hover:underline">
+          <Link href={href} className="flex-shrink-0 text-xs font-medium text-brand hover:underline">
             Vedi tutte →
           </Link>
         )}
@@ -309,7 +309,7 @@ function Kpi({
   info?: string;
   colore?: "slate" | "red" | "amber";
 }) {
-  const stili = { slate: "text-[#1e3a5f]", red: "text-red-600", amber: "text-amber-600" } as const;
+  const stili = { slate: "text-brand", red: "text-red-600", amber: "text-amber-600" } as const;
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-1">

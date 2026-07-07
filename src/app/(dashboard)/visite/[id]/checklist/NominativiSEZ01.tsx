@@ -26,7 +26,7 @@ interface Conferma {
 }
 
 const INPUT =
-  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50";
+  "min-h-[44px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50";
 
 export default function NominativiSEZ01({
   nominativi,
@@ -84,7 +84,7 @@ export default function NominativiSEZ01({
               <div key={f.key}>
                 <label className="block text-xs font-medium text-gray-700">{f.label}</label>
                 {dlRsppFusi ? (
-                  <p className="mt-1 flex min-h-[44px] items-center rounded-lg border border-dashed border-[#1e3a5f]/40 bg-[#1e3a5f]/5 px-3 text-sm text-[#1e3a5f]">
+                  <p className="mt-1 flex min-h-[44px] items-center rounded-lg border border-dashed border-brand/40 bg-brand/5 px-3 text-sm text-brand">
                     Coincide con il Datore di Lavoro ({dl?.nome})
                   </p>
                 ) : (
@@ -110,7 +110,7 @@ export default function NominativiSEZ01({
                       checked={dlRsppFusi}
                       disabled={!dl}
                       onChange={(e) => toggleDlRspp(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                      className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
                     />
                     Il Datore di Lavoro svolge direttamente i compiti di RSPP (percorso DL-SPP)
                   </label>

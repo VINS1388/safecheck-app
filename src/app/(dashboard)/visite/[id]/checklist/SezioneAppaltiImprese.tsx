@@ -108,7 +108,7 @@ export default function SezioneAppaltiImprese({
             <button
               type="button"
               onClick={() => setAperta(null)}
-              className="text-xs font-medium text-[#1e3a5f] hover:underline"
+              className="text-xs font-medium text-brand hover:underline"
             >
               ← Torna all&apos;elenco imprese
             </button>
@@ -253,7 +253,7 @@ export default function SezioneAppaltiImprese({
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 placeholder="Es. Alfa Impianti Srl"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
               />
               <label className="mt-2 block text-xs font-medium text-gray-700">
                 Tipo impresa
@@ -261,7 +261,7 @@ export default function SezioneAppaltiImprese({
               <select
                 value={tipo}
                 onChange={(e) => setTipo(e.target.value as TipoImpresa)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
               >
                 {TIPI.map((t) => (
                   <option key={t} value={t}>
@@ -275,7 +275,7 @@ export default function SezioneAppaltiImprese({
                   type="button"
                   disabled={busy}
                   onClick={aggiungi}
-                  className="min-h-[44px] flex-1 rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:opacity-50"
+                  className="min-h-[44px] flex-1 rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50"
                 >
                   {busy ? "Aggiunta…" : "Aggiungi"}
                 </button>
@@ -295,7 +295,7 @@ export default function SezioneAppaltiImprese({
             <button
               type="button"
               onClick={() => setMostraForm(true)}
-              className="min-h-[48px] w-full rounded-lg border border-dashed border-[#1e3a5f] px-4 text-sm font-semibold text-[#1e3a5f] transition hover:bg-[#1e3a5f]/5"
+              className="min-h-[48px] w-full rounded-lg border border-dashed border-brand px-4 text-sm font-semibold text-brand transition hover:bg-brand/5"
             >
               + Aggiungi impresa
             </button>
@@ -308,7 +308,7 @@ export default function SezioneAppaltiImprese({
 
 function BadgeTipo({ tipo }: { tipo: TipoImpresa }) {
   return (
-    <span className="inline-block rounded-full bg-[#1e3a5f]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1e3a5f]">
+    <span className="inline-block rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
       {ETICHETTE_TIPO_IMPRESA[tipo]}
     </span>
   );

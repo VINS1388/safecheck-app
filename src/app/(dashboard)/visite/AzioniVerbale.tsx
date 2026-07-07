@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { StatoVerbaleUI } from "@/components/ui/StatoBadge";
 import { eliminaBozzaAction } from "./actions";
 
-const LINK = "font-medium text-[#1e3a5f] hover:underline disabled:opacity-40";
+const LINK = "font-medium text-brand hover:underline disabled:opacity-40";
 
 interface Props {
   visitaId: string;

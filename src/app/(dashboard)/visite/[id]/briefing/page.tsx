@@ -32,7 +32,7 @@ export default async function BriefingPage({
   return (
     <main className="mx-auto max-w-xl">
       <div className="mb-6">
-        <Link href={`/clienti/${visita.cliente_id}/sedi/${visita.sede_id}`} className="text-sm text-[#1e3a5f] hover:underline">
+        <Link href={`/clienti/${visita.cliente_id}/sedi/${visita.sede_id}`} className="text-sm text-brand hover:underline">
           ← Scheda sede
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-gray-900">Briefing sopralluogo</h1>
@@ -65,7 +65,7 @@ export default async function BriefingPage({
 
           <Contesto etichetta="Ultimo verbale chiuso">
             {ultimoChiuso ? (
-              <Link href={`/visite/${ultimoChiuso.id}/riepilogo`} className="inline-flex items-center gap-2 text-[#1e3a5f] hover:underline">
+              <Link href={`/visite/${ultimoChiuso.id}/riepilogo`} className="inline-flex items-center gap-2 text-brand hover:underline">
                 <StatoBadge statoVerbale={ultimoChiuso.stato_verbale} numeroVerbale={ultimoChiuso.numero_verbale} />
                 <span className="text-sm">{formatDate(ultimoChiuso.data_visita)}</span>
               </Link>
@@ -76,7 +76,7 @@ export default async function BriefingPage({
 
           {bozzaAperta && (
             <Contesto etichetta="Bozza aperta">
-              <Link href={`/visite/${bozzaAperta.id}/avvia`} className="text-sm text-[#1e3a5f] hover:underline">
+              <Link href={`/visite/${bozzaAperta.id}/avvia`} className="text-sm text-brand hover:underline">
                 Riprendi bozza del {formatDate(bozzaAperta.data_visita)}
               </Link>
             </Contesto>
@@ -98,7 +98,7 @@ export default async function BriefingPage({
         <div className="mt-6">
           <Link
             href={`/visite/${id}/checklist`}
-            className="flex min-h-[48px] w-full items-center justify-center rounded-lg bg-[#1e3a5f] text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="flex min-h-[48px] w-full items-center justify-center rounded-lg bg-brand text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Inizia sopralluogo
           </Link>

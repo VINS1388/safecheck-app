@@ -3,7 +3,7 @@ import { getVisitaById } from "@/lib/db/queries/visite";
 import { avviaSopralluogoAction } from "./actions";
 
 const inputCls =
-  "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 const roCls =
   "mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600";
 const labelCls = "block text-sm font-medium text-gray-700";
@@ -34,7 +34,7 @@ export default async function AvviaPage({
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-6 text-center">
-        <span className="text-2xl font-bold tracking-tight text-[#1e3a5f]">
+        <span className="text-2xl font-bold tracking-tight text-brand">
           SafeCheck
         </span>
         <h1 className="mt-1 text-xl font-semibold text-gray-900">
@@ -141,7 +141,7 @@ export default async function AvviaPage({
 
         <button
           type="submit"
-          className="min-h-[48px] w-full rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+          className="min-h-[48px] w-full rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
         >
           Inizia sopralluogo
         </button>

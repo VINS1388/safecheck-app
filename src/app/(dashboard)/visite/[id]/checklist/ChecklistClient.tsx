@@ -820,7 +820,7 @@ export default function ChecklistClient({
                 className={cn(
                   "flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
                   attiva
-                    ? "border-[#1e3a5f] bg-[#1e3a5f] text-white"
+                    ? "border-brand bg-brand text-white"
                     : collassata
                       ? "border-gray-300 bg-gray-100 text-gray-500 hover:bg-gray-200"
                       : completa
@@ -1008,7 +1008,7 @@ export default function ChecklistClient({
         {isUltima ? (
           <Link
             href={`/visite/${visitaId}/riepilogo`}
-            className="flex min-h-[44px] items-center rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="flex min-h-[44px] items-center rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Vai al riepilogo
           </Link>
@@ -1016,7 +1016,7 @@ export default function ChecklistClient({
           <button
             type="button"
             onClick={() => vaiASezione(sezioneCorrente + 1)}
-            className="min-h-[44px] rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="min-h-[44px] rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Avanti
           </button>

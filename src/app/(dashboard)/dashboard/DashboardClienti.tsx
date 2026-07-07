@@ -27,7 +27,7 @@ export default function DashboardClienti({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Cerca cliente…"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] sm:w-64"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand sm:w-64"
         />
       </div>
 
@@ -50,7 +50,7 @@ export default function DashboardClienti({
               <Link
                 key={c.id}
                 href={`/clienti/${c.id}`}
-                className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-[#1e3a5f]/30"
+                className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-brand/30"
               >
                 <p className="font-medium text-gray-900">{c.ragione_sociale}</p>
                 <p className="mt-0.5 text-sm text-gray-500">{c.citta ?? "—"}</p>
@@ -95,7 +95,7 @@ export default function DashboardClienti({
                     <td className="px-4 py-3 text-right">
                       <Link
                         href={`/clienti/${c.id}`}
-                        className="font-medium text-[#1e3a5f] hover:underline"
+                        className="font-medium text-brand hover:underline"
                       >
                         Apri
                       </Link>

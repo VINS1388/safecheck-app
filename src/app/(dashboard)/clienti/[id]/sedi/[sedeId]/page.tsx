@@ -50,7 +50,7 @@ export default async function SedeDettaglioPage({
   return (
     <main className="mx-auto max-w-3xl">
       <div className="mb-6">
-        <Link href={`/clienti/${id}`} className="text-sm text-[#1e3a5f] hover:underline">
+        <Link href={`/clienti/${id}`} className="text-sm text-brand hover:underline">
           ← {cliente?.ragione_sociale ?? "Scheda cliente"}
         </Link>
         <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -58,7 +58,7 @@ export default async function SedeDettaglioPage({
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold text-gray-900">{sede.nome}</h1>
               {sede.principale && (
-                <span className="rounded-full bg-[#1e3a5f]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1e3a5f]">
+                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
                   Principale
                 </span>
               )}
@@ -101,7 +101,7 @@ export default async function SedeDettaglioPage({
           <form action={nuovaVisitaAction.bind(null, id, sedeId, moduliOpzioni[0]?.id)}>
             <button
               type="submit"
-              className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+              className="min-h-[40px] rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover"
             >
               Nuova visita
             </button>
@@ -134,7 +134,7 @@ export default async function SedeDettaglioPage({
             <h2 className="text-sm font-semibold text-gray-900">Piano visite</h2>
             <Link
               href={`/clienti/${id}/sedi/${sedeId}/modifica`}
-              className="text-xs font-medium text-[#1e3a5f] hover:underline"
+              className="text-xs font-medium text-brand hover:underline"
             >
               Configura →
             </Link>
@@ -175,14 +175,14 @@ export default async function SedeDettaglioPage({
             <li
               key={v.id}
               className={`rounded-xl border bg-white p-4 shadow-sm ${
-                i === 0 ? "border-[#1e3a5f]/30" : "border-gray-200"
+                i === 0 ? "border-brand/30" : "border-gray-200"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
-                    {i === 0 && <span className="text-[11px] font-medium text-[#1e3a5f]">più recente</span>}
+                    {i === 0 && <span className="text-[11px] font-medium text-brand">più recente</span>}
                   </div>
                   <p className="mt-1 text-sm text-gray-500">{formatDate(v.data_visita)}</p>
                 </div>
@@ -192,16 +192,16 @@ export default async function SedeDettaglioPage({
                       <Link href={`/visite/${v.id}/briefing`} className="font-medium text-gray-600 hover:underline">
                         Briefing
                       </Link>
-                      <Link href={`/visite/${v.id}/avvia`} className="font-medium text-[#1e3a5f] hover:underline">
+                      <Link href={`/visite/${v.id}/avvia`} className="font-medium text-brand hover:underline">
                         Riprendi
                       </Link>
                     </>
                   ) : (
                     <>
-                      <Link href={`/visite/${v.id}/riepilogo`} className="font-medium text-[#1e3a5f] hover:underline">
+                      <Link href={`/visite/${v.id}/riepilogo`} className="font-medium text-brand hover:underline">
                         Leggi
                       </Link>
-                      <a href={`/api/visite/${v.id}/download-pdf`} className="font-medium text-[#1e3a5f] hover:underline">
+                      <a href={`/api/visite/${v.id}/download-pdf`} className="font-medium text-brand hover:underline">
                         PDF
                       </a>
                     </>

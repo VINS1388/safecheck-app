@@ -58,7 +58,7 @@ function GenLink({ l }: { l: VerbaleLink }) {
   return (
     <Link
       href={`/visite/${l.id}/riepilogo`}
-      className="font-semibold text-[#1e3a5f] hover:underline"
+      className="font-semibold text-brand hover:underline"
     >
       {l.numero ?? "verbale in bozza"}
     </Link>
@@ -217,7 +217,7 @@ export default function RiepilogoClient({
             <p className="text-sm font-semibold text-gray-900">
               Livello di conformità complessivo
             </p>
-            <p className="text-2xl font-bold text-[#1e3a5f]">
+            <p className="text-2xl font-bold text-brand">
               {haccpScoring.livello === null ? "n/d" : `${haccpScoring.livello}/100`}
             </p>
           </div>
@@ -455,7 +455,7 @@ export default function RiepilogoClient({
           rows={4}
           disabled={chiusa}
           placeholder="Osservazioni conclusive, raccomandazioni, accordi sui tempi…"
-          className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-50 disabled:text-gray-500"
+          className="mt-1 w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50 disabled:text-gray-500"
         />
       </div>
 
@@ -512,7 +512,7 @@ export default function RiepilogoClient({
               type="button"
               disabled={azione !== null}
               onClick={() => eseguiClone("duplica")}
-              className="min-h-[44px] flex-1 rounded-lg border border-[#1e3a5f] px-4 text-sm font-semibold text-[#1e3a5f] transition hover:bg-[#1e3a5f] hover:text-white disabled:opacity-40"
+              className="min-h-[44px] flex-1 rounded-lg border border-brand px-4 text-sm font-semibold text-brand transition hover:bg-brand hover:text-white disabled:opacity-40"
             >
               {azione === "duplica" ? "Duplicazione…" : "Duplica"}
             </button>
@@ -552,7 +552,7 @@ export default function RiepilogoClient({
         {chiusa ? (
           <a
             href={`/api/visite/${visitaId}/download-pdf`}
-            className="flex min-h-[48px] items-center justify-center rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="flex min-h-[48px] items-center justify-center rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Scarica PDF
           </a>
@@ -561,7 +561,7 @@ export default function RiepilogoClient({
             type="button"
             disabled={bloccato || generando}
             onClick={generaPdf}
-            className="min-h-[48px] rounded-lg bg-[#1e3a5f] px-5 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-[48px] rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {generando ? "Generazione verbale in corso…" : "Genera verbale PDF"}
           </button>

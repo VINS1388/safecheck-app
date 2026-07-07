@@ -6,17 +6,51 @@ Censimento del design system in uso (Sprint 15.1). SafeCheck usa **Tailwind CSS 
 La UI è colocata nelle route; da Sprint 15.1 i componenti trasversali di stato
 stanno in `src/components/ui/`.
 
-## Colori brand
+## Colori brand — TOKEN (Sprint 16.5 · S1)
 
-| Token | Valore | Uso |
+Da S1 il navy di brand è un **token `@theme`** in `globals.css`, non più un
+letterale hex sparso. Le utility sono generate da Tailwind v4:
+
+| Token `@theme` | Valore | Utility generate | Uso |
+|---|---|---|---|
+| `--color-brand` | `#1e3a5f` (navy pieno) | `bg-brand`, `text-brand`, `border-brand`, `ring-brand`, `from-brand`, `bg-brand/10`… | primari, link, accenti, header, ruolo **admin** |
+| `--color-brand-hover` | `#16304e` | `hover:bg-brand-hover` | hover dei bottoni primari |
+| `--color-brand-soft` | `#2c5480` (navy intermedio) | `to-brand-soft`, `bg-brand-soft`… | gradient; ruolo **planner** (applicazione badge in S2) |
+| `--background` (`:root`) | `#f8f9fa` | var CSS | sfondo pagina |
+| `--foreground` (`:root`) | `#171717` | var CSS | testo base |
+
+> **Migrazione S1:** 188 sostituzioni su 37 file — `bg-[#1e3a5f]`→`bg-brand`,
+> `hover:bg-[#16304e]`→`hover:bg-brand-hover`, `to-[#2c5480]`→`to-brand-soft`.
+> Resa invariata: i valori dei token sono identici agli hex precedenti; in
+> Tailwind v4 anche i modificatori d'opacità (`bg-brand/10`) compilano come
+> le vecchie forme arbitrarie. Build/tsc/eslint verdi.
+
+### Scala ruoli (definita in S1, applicata ai badge in S2)
+
+Decisione Sprint 16.5 — i ruoli si distinguono con **tinte del navy**, mai con
+verde/ambra/rosso (riservati agli stati operativi). L'etichetta ruolo resta
+sempre in testo, mai solo colore.
+
+| Ruolo | Tinta | Espressione (S2) |
 |---|---|---|
-| Brand primario | `#1e3a5f` (navy) | bottoni primari, link, accenti, header |
-| Brand hover | `#16304e` | hover dei bottoni primari |
-| Background app | `#f8f9fa` (`--background`) | sfondo pagina |
-| Foreground | `#171717` (`--foreground`) | testo base |
+| admin | navy pieno | `bg-brand text-white` |
+| planner | navy intermedio | `bg-brand-soft text-white` |
+| specialist / tecnico | navy tenue | `bg-brand/10 text-brand` |
+| *disattivato* | grigio neutro | `bg-gray-100 text-gray-500` — **stato** che sovrascrive la tinta ruolo, non un colore-ruolo |
 
-`#1e3a5f` è usato come literal Tailwind (`bg-[#1e3a5f]`, `text-[#1e3a5f]`,
-`border-[#1e3a5f]`, `bg-[#1e3a5f]/10`).
+> Oggi `RuoloBadge` usa ancora purple/blue/teal (fuori palette): la conversione
+> a questa scala è parte di **S2** (Badge unificato), non di S1.
+
+### Residui hardcoded noti dopo S1 (intenzionali)
+
+- `src/lib/pdf/generaVerbale.ts` — hex per **PDFKit** (server-side, nessun layer
+  CSS): già centralizzati come costanti `BRAND`/`GRIGIO`/colori esito. Non
+  tokenizzabili via CSS. Restano.
+- `src/app/(auth)/login/login-form.tsx` — `hover:bg-[#16304f]`: **variante refuso**
+  del navy hover (differisce di 1 da `#16304e`). Lasciato invariato per non
+  alterare il pixel renderizzato; da normalizzare in S2 con la primitiva `Button`.
+- `src/components/filters/FilterBar.tsx` — `accent-[#dc2626]`: colore **stato**
+  (danger), non brand. I token di stato (ok/warn/danger) arrivano in S2.
 
 ## Gerarchia colori di stato
 

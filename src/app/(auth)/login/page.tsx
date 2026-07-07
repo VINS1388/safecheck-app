@@ -16,7 +16,7 @@ export default async function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-[#1e3a5f]">
+          <h1 className="text-3xl font-bold tracking-tight text-brand">
             SafeCheck
           </h1>
           <p className="mt-1 text-sm text-gray-500">

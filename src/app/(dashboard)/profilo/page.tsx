@@ -6,7 +6,7 @@ import { aggiornaProfiloAction } from "./actions";
 export const metadata = { title: "Il mio profilo · SafeCheck" };
 
 const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 const inputRO =
   "mt-1 w-full cursor-not-allowed rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500";
 
@@ -83,7 +83,7 @@ export default async function ProfiloPage({
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            className="rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e]"
+            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
           >
             Salva modifiche
           </button>

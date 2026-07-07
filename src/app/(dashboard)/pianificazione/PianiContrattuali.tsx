@@ -77,7 +77,7 @@ export default function PianiContrattuali({ piani }: { piani: PianoRiepilogo[] }
                   className={cn(
                     "min-h-[38px] rounded-lg px-3 text-xs font-semibold transition",
                     p.puoGenerareProssimo
-                      ? "bg-[#1e3a5f] text-white enabled:hover:bg-[#16304e] disabled:opacity-50"
+                      ? "bg-brand text-white enabled:hover:bg-brand-hover disabled:opacity-50"
                       : "cursor-not-allowed border border-gray-200 bg-gray-50 text-gray-400"
                   )}
                 >

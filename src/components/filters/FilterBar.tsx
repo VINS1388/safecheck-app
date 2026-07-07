@@ -58,7 +58,7 @@ const PERIODO_LABEL: Record<PeriodoPreset, string> = {
 };
 
 const selectCls =
-  "min-h-[44px] w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "min-h-[44px] w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 
 export default function FilterBar({
   config,
@@ -225,9 +225,9 @@ export default function FilterBar({
       {chips.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {chips.map((c) => (
-            <span key={c.key} className="inline-flex items-center gap-1.5 rounded-full bg-[#1e3a5f]/10 py-1 pl-3 pr-1.5 text-xs font-medium text-[#1e3a5f]">
+            <span key={c.key} className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 py-1 pl-3 pr-1.5 text-xs font-medium text-brand">
               {c.label}
-              <button type="button" onClick={c.onRemove} aria-label={`Rimuovi ${c.label}`} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-[#1e3a5f]/20">
+              <button type="button" onClick={c.onRemove} aria-label={`Rimuovi ${c.label}`} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-brand/20">
                 ×
               </button>
             </span>
@@ -253,7 +253,7 @@ export default function FilterBar({
                   Azzera
                 </button>
               )}
-              <button type="button" onClick={() => setSheet(false)} className="min-h-[44px] flex-1 rounded-lg bg-[#1e3a5f] text-sm font-semibold text-white hover:bg-[#16304e]">
+              <button type="button" onClick={() => setSheet(false)} className="min-h-[44px] flex-1 rounded-lg bg-brand text-sm font-semibold text-white hover:bg-brand-hover">
                 Applica
               </button>
             </div>

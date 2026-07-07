@@ -32,9 +32,9 @@ const RUOLO_BADGE: Record<RuoloUtente, string> = {
 const RUOLI: RuoloUtente[] = ["admin", "planner", "specialist"];
 
 const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]";
+  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
 const btnPrimary =
-  "inline-flex items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16304e] disabled:opacity-50";
+  "inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50";
 const btnSecondary =
   "inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50";
 const LOCKOUT_MSG =
@@ -128,7 +128,7 @@ export default function OrganizzazioneClient({
 
       {/* Profilo Organizzazione (dati reali, migration 031). Lettura: tutti;
           scrittura: admin — qui siamo in area admin-only, quindi editabile. */}
-      <div className="rounded-xl border border-gray-200 bg-gradient-to-r from-[#1e3a5f] to-[#2c5480] p-5 text-white">
+      <div className="rounded-xl border border-gray-200 bg-gradient-to-r from-brand to-brand-soft p-5 text-white">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-wide text-white/60">Organizzazione corrente</p>
@@ -409,21 +409,21 @@ function RigaAzioni({
       <button
         type="button"
         onClick={onModifica}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] hover:bg-[#1e3a5f]/10"
+        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
       >
         Modifica
       </button>
       <button
         type="button"
         onClick={onRuolo}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] hover:bg-[#1e3a5f]/10"
+        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
       >
         Ruolo
       </button>
       <button
         type="button"
         onClick={onReset}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] hover:bg-[#1e3a5f]/10"
+        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
       >
         Reset password
       </button>

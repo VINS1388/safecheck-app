@@ -84,7 +84,7 @@ export default async function ClienteDettaglioPage({
   return (
     <main className="mx-auto max-w-3xl">
       <div className="mb-6">
-        <Link href="/clienti" className="text-sm text-[#1e3a5f] hover:underline">
+        <Link href="/clienti" className="text-sm text-brand hover:underline">
           ← Clienti
         </Link>
         <div className="mt-2 flex items-start justify-between gap-3">
@@ -135,7 +135,7 @@ export default async function ClienteDettaglioPage({
         <h2 className="text-lg font-semibold text-gray-900">Sedi operative</h2>
         <Link
           href={`/clienti/${cliente.id}/sedi/nuova`}
-          className="rounded-lg border border-[#1e3a5f] px-3 py-2 text-sm font-semibold text-[#1e3a5f] transition hover:bg-[#1e3a5f] hover:text-white"
+          className="rounded-lg border border-brand px-3 py-2 text-sm font-semibold text-brand transition hover:bg-brand hover:text-white"
         >
           + Nuova sede
         </Link>
@@ -163,7 +163,7 @@ export default async function ClienteDettaglioPage({
                         {s.nome}
                       </Link>
                       {s.principale && (
-                        <span className="rounded-full bg-[#1e3a5f]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1e3a5f]">
+                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
                           Principale
                         </span>
                       )}
@@ -195,7 +195,7 @@ export default async function ClienteDettaglioPage({
                     // La sede ha slot pianificati: il selettore vive nella scheda sede.
                     <Link
                       href={`/clienti/${cliente.id}/sedi/${s.id}`}
-                      className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"
+                      className="min-h-[44px] w-full rounded-lg bg-brand px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-brand-hover sm:w-auto"
                     >
                       Nuova visita
                     </Link>
@@ -203,7 +203,7 @@ export default async function ClienteDettaglioPage({
                     <form action={nuovaVisitaAction.bind(null, cliente.id, s.id, undefined)}>
                       <button
                         type="submit"
-                        className="min-h-[44px] w-full rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white transition hover:bg-[#16304e] sm:w-auto"
+                        className="min-h-[44px] w-full rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover sm:w-auto"
                       >
                         Nuova visita
                       </button>
@@ -213,7 +213,7 @@ export default async function ClienteDettaglioPage({
 
                 {/* Azioni gestione sede */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-sm">
-                  <Link href={`/clienti/${cliente.id}/sedi/${s.id}`} className="font-medium text-[#1e3a5f] hover:underline">
+                  <Link href={`/clienti/${cliente.id}/sedi/${s.id}`} className="font-medium text-brand hover:underline">
                     Apri sede
                   </Link>
                   <Link

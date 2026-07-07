@@ -229,7 +229,7 @@ export default async function RiepilogoPage({
       <div className="mb-6">
         <Link
           href={`/visite/${id}/checklist`}
-          className="text-sm text-[#1e3a5f] hover:underline"
+          className="text-sm text-brand hover:underline"
         >
           ← Torna alla checklist
         </Link>

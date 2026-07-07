@@ -44,7 +44,7 @@ export default async function ScadenzePage({
           <select
             name="cliente"
             defaultValue={clienteId ?? ""}
-            className="mt-1 min-h-[40px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+            className="mt-1 min-h-[40px] rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           >
             <option value="">Tutti i clienti</option>
             {clienti.map((c) => (
@@ -56,12 +56,12 @@ export default async function ScadenzePage({
         </div>
         <button
           type="submit"
-          className="min-h-[40px] rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white hover:bg-[#1e3a5f]/90"
+          className="min-h-[40px] rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90"
         >
           Filtra
         </button>
         {clienteId && (
-          <Link href="/scadenze" className="min-h-[40px] py-2 text-sm text-[#1e3a5f] hover:underline">
+          <Link href="/scadenze" className="min-h-[40px] py-2 text-sm text-brand hover:underline">
             Azzera
           </Link>
         )}

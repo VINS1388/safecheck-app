@@ -212,7 +212,7 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                         <span
                           title="Assegnato manualmente — non seguirà i cambi di tecnico predefinito del piano"
                           aria-label="Assegnato manualmente"
-                          className="text-[#1e3a5f]"
+                          className="text-brand"
                         >
                           📌
                         </span>
@@ -284,7 +284,7 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                         type="button"
                         onClick={() => salvaSlot(s)}
                         disabled={salvando}
-                        className="min-h-[38px] rounded-lg bg-[#1e3a5f] px-3 text-xs font-semibold text-white disabled:opacity-50"
+                        className="min-h-[38px] rounded-lg bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
                       >
                         {salvando ? "…" : "Salva"}
                       </button>
@@ -300,7 +300,7 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                           type="button"
                           onClick={() => ripristinaDefault(s.id)}
                           disabled={salvando}
-                          className="ml-auto text-xs font-medium text-gray-500 hover:text-[#1e3a5f] hover:underline disabled:opacity-50"
+                          className="ml-auto text-xs font-medium text-gray-500 hover:text-brand hover:underline disabled:opacity-50"
                         >
                           Ripristina tecnico predefinito del piano
                         </button>
@@ -313,7 +313,7 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                       <button
                         type="button"
                         onClick={() => apriEdit(s)}
-                        className="text-xs font-medium text-[#1e3a5f] hover:underline"
+                        className="text-xs font-medium text-brand hover:underline"
                       >
                         {s.dataPianificata ? "Modifica data / tecnico" : "Pianifica (data / tecnico)"}
                       </button>
@@ -321,7 +321,7 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
                     {s.stato === "eseguita" && s.visitaId && (
                       <Link
                         href={`/visite/${s.visitaId}/checklist`}
-                        className="text-xs font-medium text-[#1e3a5f] hover:underline"
+                        className="text-xs font-medium text-brand hover:underline"
                       >
                         Apri verbale →
                       </Link>
