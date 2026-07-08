@@ -8,6 +8,7 @@ import {
   type VisitaRiga,
   type CoperturaRiga,
   type CaricoRiga,
+  type RilievoRiga,
 } from "@/lib/server/dashboard";
 import { parseFiltri, rangePeriodo } from "@/lib/filters";
 import { formatDate } from "@/lib/utils";
@@ -60,21 +61,46 @@ function TecnicoView({
 }: {
   data: Awaited<ReturnType<typeof getDashboardTecnico>>;
 }) {
+  const agendaVuota =
+    !data.prossima && data.inRitardo.totale === 0 && data.oggi.totale === 0 && data.settimana.totale === 0;
+
   return (
     <div className="mt-8 space-y-6">
+      {/* Prossima visita in evidenza — la call-to-action del tecnico */}
+      {data.prossima && <ProssimaCard s={data.prossima} />}
+
+      {/* Agenda a bucket — sostituisce la finestra piatta 14gg */}
+      {data.inRitardo.totale > 0 && (
+        <Blocco titolo="In ritardo" contatore={data.inRitardo.totale} sottotitolo="data pianificata già passata" href="/pianificazione">
+          <ul className="space-y-2">{data.inRitardo.righe.map((s) => <SlotItem key={s.id} s={s} />)}</ul>
+        </Blocco>
+      )}
+
+      <Blocco titolo="Oggi" contatore={data.oggi.totale} href="/pianificazione">
+        {data.oggi.righe.length === 0 ? (
+          <EmptyState compatto titolo="Niente in agenda per oggi" />
+        ) : (
+          <ul className="space-y-2">{data.oggi.righe.map((s) => <SlotItem key={s.id} s={s} />)}</ul>
+        )}
+      </Blocco>
+
+      <Blocco titolo="Questa settimana" contatore={data.settimana.totale} sottotitolo="prossimi 7 giorni" href="/pianificazione">
+        {data.settimana.righe.length === 0 ? (
+          <EmptyState compatto titolo="Nessuna visita nei prossimi 7 giorni" />
+        ) : (
+          <ul className="space-y-2">{data.settimana.righe.map((s) => <SlotItem key={s.id} s={s} />)}</ul>
+        )}
+      </Blocco>
+
+      {agendaVuota && (
+        <EmptyState titolo="Agenda libera" descrizione="Non hai visite in ritardo, oggi o nei prossimi 7 giorni." />
+      )}
+
       <Blocco titolo="Da completare" contatore={data.daCompletare.totale} href="/visite?stato=bozza">
         {data.daCompletare.righe.length === 0 ? (
           <EmptyState compatto titolo="Nessuna bozza aperta" descrizione="Avvia un sopralluogo da una sede per iniziare un verbale." ctaHref="/clienti" ctaLabel="Vai ai clienti" />
         ) : (
           <ul className="space-y-2">{data.daCompletare.righe.map((b) => <BozzaItem key={b.id} b={b} />)}</ul>
-        )}
-      </Blocco>
-
-      <Blocco titolo="Prossime visite" contatore={data.prossime.totale} sottotitolo="prossimi 14 giorni" href="/pianificazione">
-        {data.prossime.righe.length === 0 ? (
-          <EmptyState compatto titolo="Nessuna visita in agenda" descrizione="Non hai slot assegnati nei prossimi 14 giorni." />
-        ) : (
-          <ul className="space-y-2">{data.prossime.righe.map((s) => <SlotItem key={s.id} s={s} />)}</ul>
         )}
       </Blocco>
 
@@ -87,6 +113,8 @@ function TecnicoView({
           </ul>
         )}
       </Blocco>
+
+      <RilieviBlocco rilievi={data.rilievi} />
 
       {/* Sezione SECONDARIA, in fondo — visibile solo se ci sono slot prendibili.
           Isolata e facilmente disattivabile (diventerà preferenza organizzativa). */}
@@ -124,12 +152,23 @@ function GestioneView({
       {/* Selettore periodo (guida Carico tecnici e, per l'admin, i KPI temporali) */}
       <FilterBar config={{ periodo: true }} filtri={filtri} periodoDefault="30gg" />
 
+      {/* Fascia KPI admin (temporale, guidata dal periodo) */}
       {data.kpi && (
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Kpi etichetta="Visite chiuse" valore={data.kpi.visiteChiuse} sotto="nel periodo" />
           <Kpi etichetta="NC rilevate" valore={data.kpi.ncRilevate} colore="red" sotto="nel periodo" info="Non conformità nei verbali chiusi del periodo (standard + per-impresa). Non è il conteggio delle NC ancora da risolvere." />
           <Kpi etichetta="Bozze aperte" valore={data.kpi.bozzeAperte} sotto="stato corrente" />
           <Kpi etichetta="Slot scoperti" valore={data.kpi.slotScoperti} colore="amber" sotto="stato corrente" />
+        </div>
+      )}
+
+      {/* Fascia KPI planner (snapshot operativo — indipendente dal periodo) */}
+      {data.plannerKpi && (
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Kpi etichetta="Slot scoperti" valore={data.plannerKpi.slotScoperti} colore="amber" sotto="senza tecnico" />
+          <Kpi etichetta="Slot in ritardo" valore={data.plannerKpi.slotInRitardo} colore="red" sotto="data già passata" />
+          <Kpi etichetta="Sedi in ritardo" valore={data.plannerKpi.sediInRitardo} colore="red" sotto="stato corrente" />
+          <Kpi etichetta="Bozze vecchie" valore={data.plannerKpi.bozzeVecchie} colore="amber" sotto="oltre 7 giorni" />
         </div>
       )}
 
@@ -165,12 +204,35 @@ function GestioneView({
             <ul className="space-y-2">{data.bozzeVecchie.righe.map((b) => <BozzaItem key={b.id} b={b} />)}</ul>
           )}
         </Blocco>
+
+        <RilieviBlocco rilievi={data.rilievi} />
       </div>
     </div>
   );
 }
 
 // ── Item riga ────────────────────────────────────────────────────────────────
+function ProssimaCard({ s }: { s: SlotRigaDash }) {
+  return (
+    <section>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Prossima visita</p>
+      <Link
+        href={`/clienti/${s.clienteId}/sedi/${s.sedeId}`}
+        className="flex min-h-[64px] items-center justify-between gap-3 rounded-xl bg-brand p-4 text-white shadow-sm transition hover:bg-brand-hover"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold">{s.clienteNome}</p>
+          <p className="truncate text-sm text-white/80">{s.sedeNome}</p>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className={`text-sm font-semibold ${s.scaduta ? "text-red-200" : "text-white"}`}>{formatDate(s.dataEff)}</p>
+          <span className="text-xs text-white/70">Apri sede →</span>
+        </div>
+      </Link>
+    </section>
+  );
+}
+
 function BozzaItem({ b }: { b: BozzaRiga }) {
   return (
     <li>
@@ -241,6 +303,37 @@ function CaricoItem({ t }: { t: CaricoRiga }) {
       <Link href={`/pianificazione?tecnico=${t.tecnicoId}`} className="flex min-h-[48px] items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50">
         <p className="truncate text-sm font-medium text-gray-900">{t.tecnicoNome}</p>
         <span className="flex-shrink-0 rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-semibold text-brand">{t.assegnate} visite</span>
+      </Link>
+    </li>
+  );
+}
+
+// Feed SOLO INFORMATIVO dei rilievi (NC/PC) nei verbali generati di recente.
+// Nessuna semantica di stato/presa in carico/scadenza: si apre il verbale in
+// consultazione. Etichetta fissa: "Rilievi recenti" (vedi mandato S4).
+function RilieviBlocco({ rilievi }: { rilievi: RilievoRiga[] }) {
+  if (rilievi.length === 0) return null;
+  return (
+    <Blocco titolo="Rilievi recenti" sottotitolo="NC e PC nei verbali generati di recente — solo consultazione">
+      <ul className="space-y-2">{rilievi.map((r) => <RilievoItem key={r.visitaId} r={r} />)}</ul>
+    </Blocco>
+  );
+}
+
+function RilievoItem({ r }: { r: RilievoRiga }) {
+  return (
+    <li>
+      <Link href={`/visite/${r.visitaId}/riepilogo`} className="flex min-h-[48px] items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-gray-900">{r.clienteNome}</p>
+          <p className="truncate text-xs text-gray-500">
+            {r.sedeNome} · {r.numeroVerbale ?? "—"} · {formatDate(r.dataVisita)}
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-2 text-xs">
+          {r.nc > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-700">{r.nc} NC</span>}
+          {r.pc > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">{r.pc} PC</span>}
+        </div>
       </Link>
     </li>
   );
