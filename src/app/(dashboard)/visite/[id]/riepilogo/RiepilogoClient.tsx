@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AlertBanner from "@/components/ui/AlertBanner";
+import Button, { buttonClasses } from "@/components/ui/Button";
 import type { ConteggiSezione } from "./page";
 import {
   salvaNoteFinaliAction,
@@ -174,19 +176,16 @@ export default function RiepilogoClient({
     <div className="space-y-6">
       {/* Avviso sostituito — priorità visiva alta (validità del verbale) */}
       {isSostituito && genealogia.sostituitoDa && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="font-semibold">Verbale sostituito — non più valido</p>
-          <p className="mt-0.5">
-            Questo verbale è stato sostituito da{" "}
-            <Link
-              href={`/visite/${genealogia.sostituitoDa.id}/riepilogo`}
-              className="font-semibold underline"
-            >
-              {genealogia.sostituitoDa.numero ?? "verbale in bozza"}
-            </Link>
-            . Resta consultabile e scaricabile in sola lettura.
-          </p>
-        </div>
+        <AlertBanner variant="warning" titolo="Verbale sostituito — non più valido">
+          Questo verbale è stato sostituito da{" "}
+          <Link
+            href={`/visite/${genealogia.sostituitoDa.id}/riepilogo`}
+            className="font-semibold underline"
+          >
+            {genealogia.sostituitoDa.numero ?? "verbale in bozza"}
+          </Link>
+          . Resta consultabile e scaricabile in sola lettura.
+        </AlertBanner>
       )}
 
       {/* Genealogia (provenienza) — solo quando esiste */}
@@ -461,7 +460,7 @@ export default function RiepilogoClient({
 
       {/* Verbale chiuso */}
       {chiusa && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+        <AlertBanner variant="success">
           Verbale generato e chiuso
           {numeroVerbale ? (
             <>
@@ -470,37 +469,37 @@ export default function RiepilogoClient({
             </>
           ) : null}
           . Il PDF è immutabile.
-        </div>
+        </AlertBanner>
       )}
 
       {/* Blocco chiusura */}
       {!chiusa && totali.obbligatorieSenzaRisposta > 0 && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <AlertBanner variant="danger" role="alert">
           {totali.obbligatorieSenzaRisposta} domand
           {totali.obbligatorieSenzaRisposta === 1 ? "a" : "e"} obbligator
           {totali.obbligatorieSenzaRisposta === 1 ? "ia" : "ie"} senza risposta —
           impossibile chiudere.
-        </div>
+        </AlertBanner>
       )}
 
       {!chiusa && totali.campoMancante > 0 && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <AlertBanner variant="danger" role="alert">
           {totali.campoMancante} domand
           {totali.campoMancante === 1 ? "a" : "e"} con campo obbligatorio non
           compilato (azione correttiva o motivazione) — impossibile chiudere.
-        </div>
+        </AlertBanner>
       )}
 
       {!chiusa && isHaccp && areeMancanti && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <AlertBanner variant="danger" role="alert">
           {"Compila le «Aree visitate» nell'intestazione HACCP — impossibile chiudere."}
-        </div>
+        </AlertBanner>
       )}
 
       {erroreGen && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <AlertBanner variant="danger" role="alert">
           {erroreGen}
-        </div>
+        </AlertBanner>
       )}
 
       {/* Azioni verbale chiuso: Duplica / Crea sostitutivo */}
@@ -544,7 +543,7 @@ export default function RiepilogoClient({
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href={`/visite/${visitaId}/checklist`}
-          className="flex min-h-[48px] items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          className={buttonClasses("secondary", "lg")}
         >
           {chiusa ? "Apri checklist (sola lettura)" : "Torna alla checklist"}
         </Link>
@@ -552,19 +551,14 @@ export default function RiepilogoClient({
         {chiusa ? (
           <a
             href={`/api/visite/${visitaId}/download-pdf`}
-            className="flex min-h-[48px] items-center justify-center rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
+            className={buttonClasses("primary", "lg")}
           >
             Scarica PDF
           </a>
         ) : (
-          <button
-            type="button"
-            disabled={bloccato || generando}
-            onClick={generaPdf}
-            className="min-h-[48px] rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <Button size="lg" disabled={bloccato || generando} onClick={generaPdf}>
             {generando ? "Generazione verbale in corso…" : "Genera verbale PDF"}
-          </button>
+          </Button>
         )}
       </div>
     </div>

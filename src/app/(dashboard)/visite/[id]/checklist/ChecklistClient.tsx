@@ -53,6 +53,7 @@ import FormazioneNominativi, {
   type FormEntry,
   FORM_ENTRY_VUOTA,
 } from "./FormazioneNominativi";
+import Button, { buttonClasses } from "@/components/ui/Button";
 
 interface Entry {
   valore: EsitoRisposta | null;
@@ -778,10 +779,28 @@ export default function ChecklistClient({
     if (typeof window !== "undefined") window.scrollTo({ top: 0 });
   }
 
+  // Progresso globale: sola aggregazione dei conteggi per-sezione già prodotti
+  // da progresso() (denominatore reattivo a collassi/gate/nominativi/imprese).
+  const progAgg = sezioni.reduce(
+    (acc, s) => {
+      const p = progresso(s.id);
+      acc.date += p.date;
+      acc.totale += p.totale;
+      return acc;
+    },
+    { date: 0, totale: 0 }
+  );
+  const globale = {
+    date: progAgg.date,
+    totale: progAgg.totale,
+    pct: progAgg.totale > 0 ? Math.round((progAgg.date / progAgg.totale) * 100) : 0,
+  };
+
   return (
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl flex-col">
-      {/* Intestazione persistente */}
-      <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8">
+      {/* Intestazione persistente — su mobile si ancora SOTTO la top bar della
+          shell (h-16 = top-16); su desktop non c'è top bar, quindi top-0. */}
+      <header className="sticky top-16 z-10 -mx-4 mb-4 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:top-0 sm:-mx-8 sm:px-8">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
@@ -807,7 +826,22 @@ export default function ChecklistClient({
           </div>
         </div>
 
-        {/* Navigazione sezioni — scroll orizzontale su mobile */}
+        {/* Progresso globale — somma dei per-sezione già calcolati da progresso()
+            (nessuna logica nuova: sola aggregazione di dati esistenti). */}
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-brand transition-all"
+              style={{ width: `${globale.pct}%` }}
+            />
+          </div>
+          <span className="flex-shrink-0 text-[11px] font-medium tabular-nums text-gray-500">
+            {globale.date}/{globale.totale} risposte
+          </span>
+        </div>
+
+        {/* Navigazione sezioni — scroll orizzontale su mobile.
+            Touch target ≥ 44px (era ~28px, il navigatore principale). */}
         <nav className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {sezioni.map((s, i) => {
             const { date, totale, collassata, completa } = progresso(s.id);
@@ -818,7 +852,7 @@ export default function ChecklistClient({
                 type="button"
                 onClick={() => vaiASezione(i)}
                 className={cn(
-                  "flex-shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                  "inline-flex min-h-[44px] flex-shrink-0 items-center gap-1 rounded-full border px-3.5 text-xs font-medium transition",
                   attiva
                     ? "border-brand bg-brand text-white"
                     : collassata
@@ -994,32 +1028,25 @@ export default function ChecklistClient({
         </div>
       </div>
 
-      {/* Footer fisso */}
-      <footer className="sticky bottom-0 z-10 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8">
-        <button
-          type="button"
+      {/* Footer fisso — padding inferiore esteso alla safe-area iOS (fix bug #2:
+          la barra azioni non finisce più sotto la home indicator). */}
+      <footer className="sticky bottom-0 z-10 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-gray-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:-mx-8 sm:px-8">
+        <Button
+          variant="secondary"
           onClick={() => vaiASezione(Math.max(0, sezioneCorrente - 1))}
           disabled={sezioneCorrente === 0}
-          className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition enabled:hover:bg-gray-50 disabled:opacity-40"
         >
           Indietro
-        </button>
+        </Button>
 
         {isUltima ? (
-          <Link
-            href={`/visite/${visitaId}/riepilogo`}
-            className="flex min-h-[44px] items-center rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
-          >
+          <Link href={`/visite/${visitaId}/riepilogo`} className={buttonClasses("primary", "lg")}>
             Vai al riepilogo
           </Link>
         ) : (
-          <button
-            type="button"
-            onClick={() => vaiASezione(sezioneCorrente + 1)}
-            className="min-h-[44px] rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
-          >
+          <Button size="lg" onClick={() => vaiASezione(sezioneCorrente + 1)}>
             Avanti
-          </button>
+          </Button>
         )}
       </footer>
     </div>
@@ -1053,14 +1080,29 @@ function IndicatoreSalvataggio({
   if (chiusa) {
     return <span className="text-xs text-gray-400">Sola lettura</span>;
   }
-  if (stato === "saving") return <span className="text-xs text-gray-500">Salvataggio…</span>;
-  if (stato === "saved") return <span className="text-xs text-green-600">Salvato</span>;
+  // Errore reso VISIBILE (pill rossa), non più solo nel tooltip `title` — su
+  // touch il tooltip è inaccessibile. Il dettaglio tecnico resta nel title.
   if (stato === "error") {
     return (
-      <span className="text-xs text-red-600" title={errore ?? undefined}>
-        Errore di salvataggio
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+        title={errore ?? undefined}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
+        Salvataggio non riuscito
       </span>
     );
   }
-  return <span className="text-xs text-transparent">·</span>;
+  // Dot di stato per rendere il salvataggio glanceable a colpo d'occhio.
+  const stile =
+    stato === "saving" ? "text-gray-500" : stato === "saved" ? "text-green-600" : "text-transparent";
+  const dot =
+    stato === "saving" ? "bg-gray-400" : stato === "saved" ? "bg-green-500" : "bg-transparent";
+  const testo = stato === "saving" ? "Salvataggio…" : stato === "saved" ? "Salvato" : "·";
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-xs", stile)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} aria-hidden />
+      {testo}
+    </span>
+  );
 }

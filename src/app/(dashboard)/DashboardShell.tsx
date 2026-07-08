@@ -66,8 +66,10 @@ export default function DashboardShell({
         <UserBox nome={nome} ruolo={ruolo} logoutAction={logoutAction} />
       </aside>
 
-      {/* Top bar mobile */}
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-brand px-4 py-3 text-white sm:hidden">
+      {/* Top bar mobile — altezza fissa 4rem (h-16) così le intestazioni sticky
+          delle pagine possono ancorarsi sotto la barra con `top-16` (fix bug #1
+          checklist: prima l'header checklist finiva SOTTO questa barra). */}
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-brand px-4 text-white sm:hidden">
         <span className="text-lg font-bold tracking-tight">SafeCheck</span>
         <button
           type="button"
