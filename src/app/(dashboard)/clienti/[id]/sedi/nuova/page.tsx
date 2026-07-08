@@ -1,6 +1,6 @@
-import Link from "next/link";
 import SedeForm from "../SedeForm";
 import { creaSedeAction } from "./actions";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default async function NuovaSedePage({
   params,
@@ -11,12 +11,7 @@ export default async function NuovaSedePage({
 
   return (
     <main className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <Link href={`/clienti/${id}`} className="text-sm text-brand hover:underline">
-          ← Scheda cliente
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-gray-900">Nuova sede</h1>
-      </div>
+      <PageHeader titolo="Nuova sede" backHref={`/clienti/${id}`} backLabel="Scheda cliente" />
 
       <SedeForm
         action={creaSedeAction}

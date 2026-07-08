@@ -8,9 +8,10 @@ import {
   eliminaClienteFisicoAction,
 } from "../actions";
 import BottoneConfermaAzione from "@/components/ui/BottoneConfermaAzione";
-
-const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
+import PageHeader from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import { buttonClasses } from "@/components/ui/Button";
 
 export default async function ModificaClientePage({
   params,
@@ -31,99 +32,73 @@ export default async function ModificaClientePage({
 
   return (
     <main className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <Link href={`/clienti/${id}`} className="text-sm text-brand hover:underline">
-          ← Scheda cliente
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-gray-900">Modifica cliente</h1>
-        <p className="text-sm text-gray-500">Anagrafica e sede legale.</p>
-      </div>
+      <PageHeader
+        titolo="Modifica cliente"
+        sottotitolo="Anagrafica e sede legale."
+        backHref={`/clienti/${id}`}
+        backLabel="Scheda cliente"
+      />
 
-      <form
-        action={aggiornaClienteAction.bind(null, id)}
-        className="space-y-4 rounded-lg border border-gray-200 bg-white p-6"
-      >
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Ragione sociale <span className="text-red-500">*</span>
-          </label>
-          <input name="ragione_sociale" required defaultValue={cliente.ragione_sociale} className={inputCls} />
-        </div>
+      <Card padding="lg">
+        <form action={aggiornaClienteAction.bind(null, id)} className="space-y-4">
+          <Field label="Ragione sociale" required>
+            <Input name="ragione_sociale" required defaultValue={cliente.ragione_sociale} />
+          </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Partita IVA</label>
-            <input name="partita_iva" defaultValue={cliente.partita_iva ?? ""} className={inputCls} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Partita IVA">
+              <Input name="partita_iva" defaultValue={cliente.partita_iva ?? ""} />
+            </Field>
+            <Field label="Codice fiscale">
+              <Input name="codice_fiscale" defaultValue={cliente.codice_fiscale ?? ""} />
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Codice fiscale</label>
-            <input name="codice_fiscale" defaultValue={cliente.codice_fiscale ?? ""} className={inputCls} />
-          </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Indirizzo sede legale
-          </label>
-          <input name="indirizzo_sede_legale" defaultValue={cliente.indirizzo_sede_legale ?? ""} className={inputCls} />
-        </div>
+          <Field label="Indirizzo sede legale">
+            <Input name="indirizzo_sede_legale" defaultValue={cliente.indirizzo_sede_legale ?? ""} />
+          </Field>
 
-        <div className="grid grid-cols-6 gap-4">
-          <div className="col-span-3">
-            <label className="block text-sm font-medium text-gray-700">
-              Città <span className="text-red-500">*</span>
-            </label>
-            <input name="citta" required defaultValue={cliente.citta ?? ""} className={inputCls} />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+            <Field label="Città" required className="col-span-2 sm:col-span-3">
+              <Input name="citta" required defaultValue={cliente.citta ?? ""} />
+            </Field>
+            <Field label="CAP" className="col-span-1">
+              <Input name="cap" defaultValue={cliente.cap ?? ""} />
+            </Field>
+            <Field label="Provincia" required className="col-span-1 sm:col-span-2">
+              <Input name="provincia" required maxLength={2} defaultValue={cliente.provincia ?? ""} className="uppercase" />
+            </Field>
           </div>
-          <div className="col-span-1">
-            <label className="block text-sm font-medium text-gray-700">CAP</label>
-            <input name="cap" defaultValue={cliente.cap ?? ""} className={inputCls} />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Provincia <span className="text-red-500">*</span>
-            </label>
-            <input name="provincia" required maxLength={2} defaultValue={cliente.provincia ?? ""} className={`${inputCls} uppercase`} />
-          </div>
-        </div>
 
-        <hr className="border-gray-100" />
-        <p className="text-xs uppercase tracking-wide text-gray-400">Referente</p>
+          <hr className="border-gray-100" />
+          <p className="text-xs uppercase tracking-wide text-gray-400">Referente</p>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Referente</label>
-            <input name="referente_principale" defaultValue={cliente.referente_principale ?? ""} className={inputCls} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Referente">
+              <Input name="referente_principale" defaultValue={cliente.referente_principale ?? ""} />
+            </Field>
+            <Field label="Telefono referente">
+              <Input name="telefono_referente" defaultValue={cliente.telefono_referente ?? ""} />
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Telefono referente</label>
-            <input name="telefono_referente" defaultValue={cliente.telefono_referente ?? ""} className={inputCls} />
+
+          <Field label="Email referente">
+            <Input name="email_referente" type="email" defaultValue={cliente.email_referente ?? ""} />
+          </Field>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Link href={`/clienti/${id}`} className={buttonClasses("secondary")}>
+              Annulla
+            </Link>
+            <button type="submit" className={buttonClasses("primary")}>
+              Salva modifiche
+            </button>
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Email referente</label>
-          <input name="email_referente" type="email" defaultValue={cliente.email_referente ?? ""} className={inputCls} />
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Link
-            href={`/clienti/${id}`}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
-            Annulla
-          </Link>
-          <button
-            type="submit"
-            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
-          >
-            Salva modifiche
-          </button>
-        </div>
-      </form>
+        </form>
+      </Card>
 
       {/* Zona gestione: disattivazione (soft, reversibile — archiviazione) */}
-      <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
+      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
         <h2 className="text-sm font-semibold text-amber-900">Disattiva cliente</h2>
         <p className="mt-1 text-xs text-amber-800">
           Il cliente viene archiviato e rimosso dagli elenchi attivi. Non viene
@@ -169,7 +144,7 @@ export default async function ModificaClientePage({
 
       {/* Eliminazione FISICA — solo admin, solo se il cliente è pulito */}
       {admin && (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-5">
+        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5">
           <h2 className="text-sm font-semibold text-red-800">Elimina definitivamente</h2>
           {dip.eliminabile ? (
             <>

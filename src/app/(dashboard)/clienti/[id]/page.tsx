@@ -9,6 +9,11 @@ import { formatDate } from "@/lib/utils";
 import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import BottoneConfermaAzione from "@/components/ui/BottoneConfermaAzione";
+import PageHeader from "@/components/ui/PageHeader";
+import { SectionCard } from "@/components/ui/Card";
+import AlertBanner from "@/components/ui/AlertBanner";
+import DataTable, { type Column } from "@/components/ui/DataTable";
+import { buttonClasses } from "@/components/ui/Button";
 import AzioniVerbale from "../../visite/AzioniVerbale";
 import { nuovaVisitaAction } from "./sedi/[sedeId]/nuova-visita/actions";
 import {
@@ -83,31 +88,27 @@ export default async function ClienteDettaglioPage({
 
   return (
     <main className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <Link href="/clienti" className="text-sm text-brand hover:underline">
-          ← Clienti
-        </Link>
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">{cliente.ragione_sociale}</h1>
-            <p className="text-sm text-gray-600">
-              {[cliente.citta, cliente.provincia].filter(Boolean).join(" · ") || "—"}
-            </p>
-          </div>
-          <Link
-            href={`/clienti/${cliente.id}/modifica`}
-            className="flex-shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
+      <PageHeader
+        titolo={cliente.ragione_sociale}
+        sottotitolo={[cliente.citta, cliente.provincia].filter(Boolean).join(" · ") || "—"}
+        backHref="/clienti"
+        backLabel="Clienti"
+        azioni={
+          <Link href={`/clienti/${cliente.id}/modifica`} className={buttonClasses("secondary")}>
             Modifica cliente
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {msg && (
-        <p className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{msg}</p>
+        <AlertBanner variant="success" role="status" className="mb-4">
+          {msg}
+        </AlertBanner>
       )}
       {err && (
-        <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{err}</p>
+        <AlertBanner variant="danger" role="alert" className="mb-4">
+          {err}
+        </AlertBanner>
       )}
 
       {/* KPI sintetici */}
@@ -118,9 +119,8 @@ export default async function ClienteDettaglioPage({
       </div>
 
       {/* Anagrafica / sede legale */}
-      <section className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-900">Sede legale</h2>
-        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+      <SectionCard titolo="Sede legale" className="mb-8">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
           {anagrafica.map(([label, valore]) => (
             <div key={label} className="flex justify-between gap-3 border-b border-gray-50 py-1">
               <dt className="text-xs text-gray-500">{label}</dt>
@@ -128,7 +128,7 @@ export default async function ClienteDettaglioPage({
             </div>
           ))}
         </dl>
-      </section>
+      </SectionCard>
 
       {/* Sedi operative */}
       <div className="mb-3 flex items-center justify-between">
@@ -337,65 +337,56 @@ export default async function ClienteDettaglioPage({
 
       {/* Verbali */}
       <div className="mt-10">
-        <h2 className="text-lg font-semibold text-gray-900">Verbali</h2>
-        {visite.length === 0 ? (
-          <div className="mt-4">
-            <EmptyState
-              titolo="Nessun verbale"
-              descrizione="Avvia un sopralluogo da una sede per generare il primo verbale."
-            />
-          </div>
-        ) : (
-          <>
-            {/* Card stack — mobile */}
-            <div className="mt-4 space-y-3 sm:hidden">
-              {visite.map((v) => (
-                <div key={v.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-gray-900">{v.sede_nome}</p>
-                      <p className="text-xs text-gray-500">{formatDate(v.data_visita)}</p>
-                    </div>
-                    <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
-                  </div>
-                  <div className="mt-3 border-t border-gray-100 pt-3 text-right">
-                    <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Tabella — desktop */}
-            <div className="mt-4 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:block">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Stato</th>
-                    <th className="px-4 py-3 font-medium">Sede</th>
-                    <th className="px-4 py-3 font-medium">Data</th>
-                    <th className="px-4 py-3 text-right font-medium">Azioni</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {visite.map((v) => (
-                    <tr key={v.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{v.sede_nome}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatDate(v.data_visita)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">Verbali</h2>
+        <VerbaliCliente visite={visite} />
       </div>
     </main>
+  );
+}
+
+// Lista verbali della scheda cliente — stesso pattern canonico di /visite
+// (DataTable desktop + card mobile, azioni via AzioniVerbale). Senza colonna
+// "Azienda" (già implicita) né filtri (la scheda è già per singolo cliente).
+function VerbaliCliente({ visite }: { visite: VisitaRiepilogo[] }) {
+  const columns: Column<VisitaRiepilogo>[] = [
+    {
+      header: "Stato",
+      cell: (v) => <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />,
+    },
+    { header: "Sede", className: "text-gray-700", cell: (v) => v.sede_nome },
+    { header: "Data", className: "text-gray-700", cell: (v) => formatDate(v.data_visita) },
+    {
+      header: "Azioni",
+      align: "right",
+      cell: (v) => <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />,
+    },
+  ];
+  return (
+    <DataTable
+      columns={columns}
+      rows={visite}
+      keyOf={(v) => v.id}
+      renderCard={(v) => (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-medium text-gray-900">{v.sede_nome}</p>
+              <p className="text-xs text-gray-500">{formatDate(v.data_visita)}</p>
+            </div>
+            <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
+          </div>
+          <div className="mt-3 border-t border-gray-100 pt-3 text-right">
+            <AzioniVerbale visitaId={v.id} stato={statoVerbaleUI(v)} />
+          </div>
+        </div>
+      )}
+      vuoto={
+        <EmptyState
+          titolo="Nessun verbale"
+          descrizione="Avvia un sopralluogo da una sede per generare il primo verbale."
+        />
+      }
+    />
   );
 }
 

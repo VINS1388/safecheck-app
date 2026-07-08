@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSedeById } from "@/lib/db/queries/sedi";
 import {
@@ -9,6 +8,7 @@ import {
 import SedeForm from "../../SedeForm";
 import { aggiornaSedeAction } from "../../actions";
 import PianoVisiteForm from "./PianoVisiteForm";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default async function ModificaSedePage({
   params,
@@ -27,12 +27,7 @@ export default async function ModificaSedePage({
 
   return (
     <main className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <Link href={`/clienti/${id}`} className="text-sm text-brand hover:underline">
-          ← Scheda cliente
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-gray-900">Modifica sede</h1>
-      </div>
+      <PageHeader titolo="Modifica sede" backHref={`/clienti/${id}`} backLabel="Scheda cliente" />
 
       <SedeForm
         action={aggiornaSedeAction.bind(null, id, sedeId)}

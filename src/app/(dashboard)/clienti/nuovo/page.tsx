@@ -1,112 +1,60 @@
 import Link from "next/link";
 import { creaClienteAction } from "./actions";
-
-const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
+import PageHeader from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import { buttonClasses } from "@/components/ui/Button";
 
 export default function NuovoClientePage() {
   return (
     <main className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <Link href="/clienti" className="text-sm text-brand hover:underline">
-          ← Clienti
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-gray-900">
-          Nuovo cliente
-        </h1>
-      </div>
+      <PageHeader titolo="Nuovo cliente" backHref="/clienti" backLabel="Clienti" />
 
-      <form
-        action={creaClienteAction}
-        className="space-y-4 rounded-lg border border-gray-200 bg-white p-6"
-      >
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Ragione sociale <span className="text-red-500">*</span>
-          </label>
-          <input
-            name="ragione_sociale"
-            required
-            placeholder="Pane Pizza Srl"
-            className={inputCls}
-          />
-        </div>
+      <Card padding="lg">
+        <form action={creaClienteAction} className="space-y-4">
+          <Field label="Ragione sociale" required>
+            <Input name="ragione_sociale" required placeholder="Pane Pizza Srl" />
+          </Field>
 
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Città <span className="text-red-500">*</span>
-            </label>
-            <input name="citta" required placeholder="Roma" className={inputCls} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Città" required className="sm:col-span-2">
+              <Input name="citta" required placeholder="Roma" />
+            </Field>
+            <Field label="Provincia" required>
+              <Input name="provincia" required maxLength={2} placeholder="RM" className="uppercase" />
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Provincia <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="provincia"
-              required
-              maxLength={2}
-              placeholder="RM"
-              className={`${inputCls} uppercase`}
-            />
+
+          <hr className="border-gray-100" />
+          <p className="text-xs uppercase tracking-wide text-gray-400">Campi opzionali</p>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Partita IVA">
+              <Input name="partita_iva" placeholder="01234567890" />
+            </Field>
+            <Field label="Referente">
+              <Input name="referente_principale" />
+            </Field>
           </div>
-        </div>
 
-        <hr className="border-gray-100" />
-        <p className="text-xs uppercase tracking-wide text-gray-400">
-          Campi opzionali
-        </p>
+          <Field label="Indirizzo sede legale">
+            <Input name="indirizzo_sede_legale" />
+          </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Partita IVA
-            </label>
-            <input name="partita_iva" placeholder="01234567890" className={inputCls} />
+          <Field label="Email referente">
+            <Input name="email_referente" type="email" placeholder="referente@azienda.it" />
+          </Field>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Link href="/clienti" className={buttonClasses("secondary")}>
+              Annulla
+            </Link>
+            <button type="submit" className={buttonClasses("primary")}>
+              Salva cliente
+            </button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Referente
-            </label>
-            <input name="referente_principale" className={inputCls} />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Indirizzo sede legale
-          </label>
-          <input name="indirizzo_sede_legale" className={inputCls} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Email referente
-          </label>
-          <input
-            name="email_referente"
-            type="email"
-            placeholder="referente@azienda.it"
-            className={inputCls}
-          />
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <Link
-            href="/clienti"
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
-            Annulla
-          </Link>
-          <button
-            type="submit"
-            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
-          >
-            Salva cliente
-          </button>
-        </div>
-      </form>
+        </form>
+      </Card>
     </main>
   );
 }

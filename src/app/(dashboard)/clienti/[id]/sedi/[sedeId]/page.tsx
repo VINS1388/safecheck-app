@@ -9,8 +9,12 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManagePlanning } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import { ETICHETTE_STATO_SLOT } from "@/types";
-import StatoBadge, { statoVerbaleUI } from "@/components/ui/StatoBadge";
+import StatoBadge, { statoVerbaleUI, type StatoVerbaleUI } from "@/components/ui/StatoBadge";
 import EmptyState from "@/components/ui/EmptyState";
+import DataTable, { type Column } from "@/components/ui/DataTable";
+import { buttonClasses } from "@/components/ui/Button";
+import AzioniVerbale from "../../../../visite/AzioniVerbale";
+import type { VisitaRiepilogo } from "@/lib/db/queries/visite";
 import { nuovaVisitaAction } from "./nuova-visita/actions";
 import NuovaVisitaConSlot from "./NuovaVisitaConSlot";
 import ServiziAttivi from "./ServiziAttivi";
@@ -76,7 +80,7 @@ export default async function SedeDettaglioPage({
           </div>
           <Link
             href={`/clienti/${id}/sedi/${sedeId}/modifica`}
-            className="flex-shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            className={`flex-shrink-0 ${buttonClasses("secondary")}`}
           >
             Modifica sede
           </Link>
@@ -99,26 +103,17 @@ export default async function SedeDettaglioPage({
         ) : (
           // Sede mono-modulo senza slot proponibili: creazione diretta (invariato).
           <form action={nuovaVisitaAction.bind(null, id, sedeId, moduliOpzioni[0]?.id)}>
-            <button
-              type="submit"
-              className="min-h-[40px] rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover"
-            >
+            <button type="submit" className={buttonClasses("primary")}>
               Nuova visita
             </button>
           </form>
         )}
         <div className="flex flex-wrap items-center gap-2">
           {ultimoChiuso && <DuplicaUltimo visitaId={ultimoChiuso.id} />}
-          <Link
-            href="/visite"
-            className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
+          <Link href="/visite" className={buttonClasses("secondary")}>
             Apri archivio
           </Link>
-          <Link
-            href="/pianificazione"
-            className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
+          <Link href="/pianificazione" className={buttonClasses("secondary")}>
             Apri pianificazione
           </Link>
         </div>
@@ -162,56 +157,62 @@ export default async function SedeDettaglioPage({
         </section>
       )}
 
-      {/* Visite collegate */}
+      {/* Visite collegate — stesso pattern canonico di /visite (DataTable +
+          AzioniVerbale). Il link "Briefing" (raggiungibile solo da qui) resta
+          come azione aggiuntiva sulle bozze. */}
       <h2 className="mb-3 text-lg font-semibold text-gray-900">Visite e verbali</h2>
-      {visite.length === 0 ? (
+      <VerbaliSede visite={visite} />
+    </main>
+  );
+}
+
+function AzioniSede({ v }: { v: VisitaRiepilogo }) {
+  const stato: StatoVerbaleUI = statoVerbaleUI(v);
+  return (
+    <div className="inline-flex items-center justify-end gap-4">
+      {stato === "bozza" && (
+        <Link href={`/visite/${v.id}/briefing`} className="font-medium text-gray-600 hover:underline">
+          Briefing
+        </Link>
+      )}
+      <AzioniVerbale visitaId={v.id} stato={stato} />
+    </div>
+  );
+}
+
+function VerbaliSede({ visite }: { visite: VisitaRiepilogo[] }) {
+  const columns: Column<VisitaRiepilogo>[] = [
+    {
+      header: "Stato",
+      cell: (v) => <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />,
+    },
+    { header: "Data", className: "text-gray-700", cell: (v) => formatDate(v.data_visita) },
+    { header: "Azioni", align: "right", cell: (v) => <AzioniSede v={v} /> },
+  ];
+  return (
+    <DataTable
+      columns={columns}
+      rows={visite}
+      keyOf={(v) => v.id}
+      renderCard={(v) => (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
+              <p className="mt-1 text-sm text-gray-500">{formatDate(v.data_visita)}</p>
+            </div>
+          </div>
+          <div className="mt-3 border-t border-gray-100 pt-3 text-right">
+            <AzioniSede v={v} />
+          </div>
+        </div>
+      )}
+      vuoto={
         <EmptyState
           titolo="Nessuna visita per questa sede"
           descrizione="Avvia il primo sopralluogo con il pulsante “Nuova visita”."
         />
-      ) : (
-        <ul className="space-y-2">
-          {visite.map((v, i) => (
-            <li
-              key={v.id}
-              className={`rounded-xl border bg-white p-4 shadow-sm ${
-                i === 0 ? "border-brand/30" : "border-gray-200"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <StatoBadge statoVerbale={v.stato_verbale} numeroVerbale={v.numero_verbale} />
-                    {i === 0 && <span className="text-[11px] font-medium text-brand">più recente</span>}
-                  </div>
-                  <p className="mt-1 text-sm text-gray-500">{formatDate(v.data_visita)}</p>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-4 text-sm">
-                  {statoVerbaleUI(v) === "bozza" ? (
-                    <>
-                      <Link href={`/visite/${v.id}/briefing`} className="font-medium text-gray-600 hover:underline">
-                        Briefing
-                      </Link>
-                      <Link href={`/visite/${v.id}/avvia`} className="font-medium text-brand hover:underline">
-                        Riprendi
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <Link href={`/visite/${v.id}/riepilogo`} className="font-medium text-brand hover:underline">
-                        Leggi
-                      </Link>
-                      <a href={`/api/visite/${v.id}/download-pdf`} className="font-medium text-brand hover:underline">
-                        PDF
-                      </a>
-                    </>
-                  )}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+      }
+    />
   );
 }
