@@ -278,15 +278,6 @@ export interface DashboardKpi {
   ultimo_sopralluogo: string | null;
 }
 
-export interface DashboardCliente {
-  id: string;
-  ragione_sociale: string;
-  citta: string | null;
-  n_sedi: number;
-  n_verbali: number;
-  ultima_visita: string | null;
-}
-
 /** KPI aggregati di studio (1 query, aggregazione lato DB). */
 export async function getDashboardKpi(): Promise<DashboardKpi> {
   const supabase = await createClient();
@@ -295,12 +286,4 @@ export async function getDashboardKpi(): Promise<DashboardKpi> {
     return { clienti_attivi: 0, verbali_totali: 0, nc_verbali_chiusi: 0, ultimo_sopralluogo: null };
   }
   return data[0] as DashboardKpi;
-}
-
-/** Rollup per-cliente per l'elenco dashboard (1 query, GROUP BY lato DB). */
-export async function getDashboardClienti(): Promise<DashboardCliente[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("dashboard_clienti");
-  if (error || !data) return [];
-  return data as DashboardCliente[];
 }
