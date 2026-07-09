@@ -68,6 +68,59 @@ function urgenzaDi(s: SlotRiga, oggi: string): Urgenza {
   return differenzaGiorni(eff, oggi) <= 30 ? "vicina" : "ok";
 }
 
+// ── Raggruppamento temporale (Sprint 18.1) ──────────────────────────────────
+// Presentazionale: opera sui dati GIÀ scopati server-side (RLS/FilterBar). Non
+// introduce logica di visibilità. Le date sono `date` in DB (yyyy-mm-dd),
+// confrontate come stringhe ISO → nessun problema di fuso orario.
+
+type Bucket = "ritardo" | "settimana" | "mese" | "anno" | "oltre" | "eseguite";
+
+const BLOCCHI: { key: Bucket; label: string; urgente?: boolean }[] = [
+  { key: "ritardo", label: "In ritardo", urgente: true },
+  { key: "settimana", label: "Questa settimana" },
+  { key: "mese", label: "Questo mese" },
+  { key: "anno", label: "Fino a fine anno" },
+  { key: "oltre", label: "Oltre" },
+  { key: "eseguite", label: "Eseguite" },
+];
+
+/** Confini (inclusivi) di settimana/mese/anno correnti, come stringhe ISO. */
+function confiniData(oggi: string) {
+  const d0 = new Date(oggi + "T00:00:00Z");
+  const day = d0.getUTCDay(); // 0 = domenica
+  const finoADomenica = day === 0 ? 0 : 7 - day; // settimana lun–dom
+  const fineSett = new Date(d0);
+  fineSett.setUTCDate(d0.getUTCDate() + finoADomenica);
+  const y = d0.getUTCFullYear();
+  const m = d0.getUTCMonth();
+  const fineMese = new Date(Date.UTC(y, m + 1, 0)); // giorno 0 del mese dopo = ultimo giorno
+  const fineAnno = new Date(Date.UTC(y, 11, 31));
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { fineSett: iso(fineSett), fineMese: iso(fineMese), fineAnno: iso(fineAnno) };
+}
+
+type Confini = ReturnType<typeof confiniData>;
+
+function bucketTemporale(rif: string, c: Confini): Bucket {
+  if (rif <= c.fineSett) return "settimana";
+  if (rif <= c.fineMese) return "mese";
+  if (rif <= c.fineAnno) return "anno";
+  return "oltre";
+}
+
+function bucketDi(s: SlotRiga, oggi: string, c: Confini): Bucket {
+  if (s.stato === "eseguita") return "eseguite";
+  // "In ritardo" = genuinamente scaduto: coincide con urgenza "scaduta", che per
+  // costruzione ESCLUDE eseguiti e in-lavorazione (decisione 2: l'in-lavorazione
+  // scaduto NON entra qui, resta neutro come oggi).
+  if (urgenzaDi(s, oggi) === "scaduta") return "ritardo";
+  const eff = s.dataPianificata ?? s.dataSuggerita;
+  // In-lavorazione con data passata: non è "in ritardo", ma non va nascosto —
+  // lo si colloca nel bucket corrente (clamp a oggi) invece di farlo sparire.
+  const rif = eff < oggi ? oggi : eff;
+  return bucketTemporale(rif, c);
+}
+
 export default function PianificazioneClient({ slots, tecnici, oggi, canManage }: Props) {
   const router = useRouter();
   const [asc, setAsc] = useState(true);
@@ -79,14 +132,28 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
   const [errore, setErrore] = useState<string | null>(null);
 
   // I filtri (cliente/sede/tecnico/stato/periodo) sono applicati server-side dalla
-  // FilterBar (URL): qui resta solo l'ordinamento per data effettiva.
-  const righe = useMemo(() => {
-    return [...slots].sort((a, b) => {
-      const da = a.dataPianificata ?? a.dataSuggerita;
-      const db = b.dataPianificata ?? b.dataSuggerita;
-      return asc ? da.localeCompare(db) : db.localeCompare(da);
-    });
-  }, [slots, asc]);
+  // FilterBar (URL). Qui: raggruppamento temporale + ordinamento per data effettiva
+  // DENTRO ogni blocco (l'ordine dei blocchi è fisso; il toggle ordina solo le righe).
+  const gruppi = useMemo(() => {
+    const c = confiniData(oggi);
+    const perBucket = new Map<Bucket, SlotRiga[]>();
+    for (const s of slots) {
+      const b = bucketDi(s, oggi, c);
+      const arr = perBucket.get(b);
+      if (arr) arr.push(s);
+      else perBucket.set(b, [s]);
+    }
+    for (const arr of perBucket.values()) {
+      arr.sort((a, b) => {
+        const da = a.dataPianificata ?? a.dataSuggerita;
+        const db = b.dataPianificata ?? b.dataSuggerita;
+        return asc ? da.localeCompare(db) : db.localeCompare(da);
+      });
+    }
+    return BLOCCHI.map((bl) => ({ ...bl, righe: perBucket.get(bl.key) ?? [] })).filter(
+      (g) => g.righe.length > 0
+    );
+  }, [slots, asc, oggi]);
 
   function apriEdit(s: SlotRiga) {
     setEditId(s.id);
@@ -147,6 +214,177 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
     }
   }
 
+  // Rendering di una singola riga slot. Estratto per riusarlo in ogni blocco:
+  // chiude su stato/handler del componente, comportamento identico a prima.
+  function renderRiga(s: SlotRiga) {
+    const u = urgenzaDi(s, oggi);
+    const dataEff = s.dataPianificata ?? s.dataSuggerita;
+    // La modifica di data/tecnico è governance: solo admin/planner.
+    const modificabile = canManage && s.stato !== "eseguita";
+    const lavorazione = inLavorazione(s);
+    const inEdit = editId === s.id;
+    return (
+      <li
+        key={s.id}
+        className={cn("rounded-lg border border-gray-200 bg-white p-3 shadow-sm", BORDO_URGENZA[u])}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">
+              {s.clienteNome} <span className="font-normal text-gray-500">· {s.sedeNome}</span>
+            </p>
+            <p className="text-xs text-gray-500">
+              Visita {s.numeroVisita} (ciclo {s.cicloNumero})
+            </p>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs">
+              {s.tecnicoId ? (
+                s.tecnicoDisattivato ? (
+                  <span
+                    className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600"
+                    title="Il tecnico assegnato è stato disattivato: lo slot resta assegnato a lui finché non viene riassegnato manualmente."
+                  >
+                    {s.tecnicoNome ? `${s.tecnicoNome} · ` : ""}Tecnico disattivato
+                  </span>
+                ) : (
+                  <span className="text-gray-600">{s.tecnicoNome ?? "—"}</span>
+                )
+              ) : (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                  Da assegnare
+                </span>
+              )}
+              {s.tecnicoPersonalizzato && (
+                <span
+                  title="Assegnato manualmente — non seguirà i cambi di tecnico predefinito del piano"
+                  aria-label="Assegnato manualmente"
+                  className="text-brand"
+                >
+                  📌
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className={cn("text-sm font-medium", u === "scaduta" ? "text-red-600" : "text-gray-800")}>
+                {formatDate(dataEff)}
+              </p>
+              {!s.dataPianificata && <p className="text-[11px] text-gray-400">(suggerita)</p>}
+            </div>
+            {lavorazione ? (
+              <span
+                className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700"
+                title="Bozza collegata a questo slot, non ancora chiusa"
+              >
+                In lavorazione
+              </span>
+            ) : (
+              <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", BADGE_STATO[s.stato])}>
+                {ETICHETTE_STATO_SLOT[s.stato]}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Azioni. Modifica data/tecnico = solo admin/planner (modificabile).
+            I link di navigazione (Apri verbale/bozza) restano per tutti. */}
+        {modificabile && inEdit ? (
+          <div className="mt-3 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Data
+              </label>
+              <input
+                type="date"
+                value={editData}
+                onChange={(e) => setEditData(e.target.value)}
+                className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
+              />
+              <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Tecnico
+              </label>
+              <select
+                value={editTecnico}
+                onChange={(e) => setEditTecnico(e.target.value)}
+                className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
+              >
+                <option value="">Da assegnare</option>
+                {/* Slot storico assegnato a un tecnico disattivato: opzione
+                    disabilitata (non riassegnabile) solo per mostrare il valore
+                    corrente finché l'admin non sceglie un tecnico attivo. */}
+                {s.tecnicoDisattivato && s.tecnicoId && (
+                  <option value={s.tecnicoId} disabled>
+                    {(s.tecnicoNome ?? "Tecnico") + " · disattivato"}
+                  </option>
+                )}
+                {tecnici.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => salvaSlot(s)}
+                disabled={salvando}
+                className="min-h-[38px] rounded-lg bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {salvando ? "…" : "Salva"}
+              </button>
+              <button
+                type="button"
+                onClick={chiudiEdit}
+                className="min-h-[38px] rounded-lg border border-gray-300 px-3 text-xs text-gray-600"
+              >
+                Annulla
+              </button>
+              {s.tecnicoPersonalizzato && (
+                <button
+                  type="button"
+                  onClick={() => ripristinaDefault(s.id)}
+                  disabled={salvando}
+                  className="ml-auto text-xs font-medium text-gray-500 hover:text-brand hover:underline disabled:opacity-50"
+                >
+                  Ripristina tecnico predefinito del piano
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            {modificabile && (
+              <button
+                type="button"
+                onClick={() => apriEdit(s)}
+                className="text-xs font-medium text-brand hover:underline"
+              >
+                {s.dataPianificata ? "Modifica data / tecnico" : "Pianifica (data / tecnico)"}
+              </button>
+            )}
+            {s.stato === "eseguita" && s.visitaId && (
+              <Link
+                href={`/visite/${s.visitaId}/checklist`}
+                className="text-xs font-medium text-brand hover:underline"
+              >
+                Apri verbale →
+              </Link>
+            )}
+            {lavorazione && s.visitaId && (
+              <Link
+                href={`/visite/${s.visitaId}/avvia`}
+                className="text-xs font-medium text-blue-700 hover:underline"
+              >
+                Apri bozza →
+              </Link>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  }
+
   return (
     <div>
       {/* Ordinamento (i filtri sono nella FilterBar sopra) */}
@@ -158,188 +396,41 @@ export default function PianificazioneClient({ slots, tecnici, oggi, canManage }
         >
           Data {asc ? "↑ crescente" : "↓ decrescente"}
         </button>
-        <span className="ml-auto text-sm text-gray-500">{righe.length} visite</span>
+        <span className="ml-auto text-sm text-gray-500">{slots.length} visite</span>
       </div>
 
       {errore && (
         <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errore}</p>
       )}
 
-      {righe.length === 0 ? (
+      {slots.length === 0 ? (
         <p className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
           Nessuna visita pianificata con questi filtri.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {righe.map((s) => {
-            const u = urgenzaDi(s, oggi);
-            const dataEff = s.dataPianificata ?? s.dataSuggerita;
-            // La modifica di data/tecnico è governance: solo admin/planner.
-            const modificabile = canManage && s.stato !== "eseguita";
-            const lavorazione = inLavorazione(s);
-            const inEdit = editId === s.id;
-            return (
-              <li
-                key={s.id}
-                className={cn("rounded-lg border border-gray-200 bg-white p-3 shadow-sm", BORDO_URGENZA[u])}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {s.clienteNome} <span className="font-normal text-gray-500">· {s.sedeNome}</span>
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Visita {s.numeroVisita} (ciclo {s.cicloNumero})
-                    </p>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-xs">
-                      {s.tecnicoId ? (
-                        s.tecnicoDisattivato ? (
-                          <span
-                            className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600"
-                            title="Il tecnico assegnato è stato disattivato: lo slot resta assegnato a lui finché non viene riassegnato manualmente."
-                          >
-                            {s.tecnicoNome ? `${s.tecnicoNome} · ` : ""}Tecnico disattivato
-                          </span>
-                        ) : (
-                          <span className="text-gray-600">{s.tecnicoNome ?? "—"}</span>
-                        )
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                          Da assegnare
-                        </span>
-                      )}
-                      {s.tecnicoPersonalizzato && (
-                        <span
-                          title="Assegnato manualmente — non seguirà i cambi di tecnico predefinito del piano"
-                          aria-label="Assegnato manualmente"
-                          className="text-brand"
-                        >
-                          📌
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className={cn("text-sm font-medium", u === "scaduta" ? "text-red-600" : "text-gray-800")}>
-                        {formatDate(dataEff)}
-                      </p>
-                      {!s.dataPianificata && <p className="text-[11px] text-gray-400">(suggerita)</p>}
-                    </div>
-                    {lavorazione ? (
-                      <span
-                        className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700"
-                        title="Bozza collegata a questo slot, non ancora chiusa"
-                      >
-                        In lavorazione
-                      </span>
-                    ) : (
-                      <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", BADGE_STATO[s.stato])}>
-                        {ETICHETTE_STATO_SLOT[s.stato]}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Azioni. Modifica data/tecnico = solo admin/planner (modificabile).
-                    I link di navigazione (Apri verbale/bozza) restano per tutti. */}
-                {modificabile && inEdit ? (
-                  <div className="mt-3 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                        Data
-                      </label>
-                      <input
-                        type="date"
-                        value={editData}
-                        onChange={(e) => setEditData(e.target.value)}
-                        className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
-                      />
-                      <label className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                        Tecnico
-                      </label>
-                      <select
-                        value={editTecnico}
-                        onChange={(e) => setEditTecnico(e.target.value)}
-                        className="min-h-[38px] rounded-lg border border-gray-300 px-2 text-sm"
-                      >
-                        <option value="">Da assegnare</option>
-                        {/* Slot storico assegnato a un tecnico disattivato: opzione
-                            disabilitata (non riassegnabile) solo per mostrare il valore
-                            corrente finché l'admin non sceglie un tecnico attivo. */}
-                        {s.tecnicoDisattivato && s.tecnicoId && (
-                          <option value={s.tecnicoId} disabled>
-                            {(s.tecnicoNome ?? "Tecnico") + " · disattivato"}
-                          </option>
-                        )}
-                        {tecnici.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => salvaSlot(s)}
-                        disabled={salvando}
-                        className="min-h-[38px] rounded-lg bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
-                      >
-                        {salvando ? "…" : "Salva"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={chiudiEdit}
-                        className="min-h-[38px] rounded-lg border border-gray-300 px-3 text-xs text-gray-600"
-                      >
-                        Annulla
-                      </button>
-                      {s.tecnicoPersonalizzato && (
-                        <button
-                          type="button"
-                          onClick={() => ripristinaDefault(s.id)}
-                          disabled={salvando}
-                          className="ml-auto text-xs font-medium text-gray-500 hover:text-brand hover:underline disabled:opacity-50"
-                        >
-                          Ripristina tecnico predefinito del piano
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 flex flex-wrap items-center gap-4">
-                    {modificabile && (
-                      <button
-                        type="button"
-                        onClick={() => apriEdit(s)}
-                        className="text-xs font-medium text-brand hover:underline"
-                      >
-                        {s.dataPianificata ? "Modifica data / tecnico" : "Pianifica (data / tecnico)"}
-                      </button>
-                    )}
-                    {s.stato === "eseguita" && s.visitaId && (
-                      <Link
-                        href={`/visite/${s.visitaId}/checklist`}
-                        className="text-xs font-medium text-brand hover:underline"
-                      >
-                        Apri verbale →
-                      </Link>
-                    )}
-                    {lavorazione && s.visitaId && (
-                      <Link
-                        href={`/visite/${s.visitaId}/avvia`}
-                        className="text-xs font-medium text-blue-700 hover:underline"
-                      >
-                        Apri bozza →
-                      </Link>
-                    )}
-                  </div>
+        gruppi.map((g) => (
+          <section key={g.key} className="mb-6">
+            <div className="mb-2 flex items-center gap-2">
+              <h2
+                className={cn(
+                  "text-sm font-semibold",
+                  g.urgente ? "text-red-600" : "text-gray-700"
                 )}
-              </li>
-            );
-          })}
-        </ul>
+              >
+                {g.label}
+              </h2>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  g.urgente ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"
+                )}
+              >
+                {g.righe.length}
+              </span>
+            </div>
+            <ul className="space-y-2">{g.righe.map(renderRiga)}</ul>
+          </section>
+        ))
       )}
     </div>
   );
