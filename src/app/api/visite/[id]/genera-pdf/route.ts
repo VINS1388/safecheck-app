@@ -27,6 +27,10 @@ import {
 import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
+import {
+  derivaScadenzeMaterializzabili,
+  type RispostaConId,
+} from "@/lib/scadenze/materializza";
 import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 export const runtime = "nodejs";
@@ -349,6 +353,48 @@ export async function POST(
       actorUserId: user.id,
       payload: { numero_verbale: numeroVerbale },
     });
+
+    // 11-ter. Materializzazione scadenze (proiezione read-only per /scadenze).
+    //   Best-effort NON BLOCCANTE (come audit e slot): gira DOPO la chiusura
+    //   committata, a valle del ricalcolo safety-net (i valori in `risposte`
+    //   sono già aggiornati → mai stale), con service role e riconciliazione
+    //   atomica via RPC `materializza_scadenze` (upsert latest-wins per
+    //   sede+modulo+domanda + DELETE delle righe stale dello stesso modulo).
+    //   PERIMETRO DICHIARATO: un attestato SENZA data (es. NC per assenza) NON
+    //   viene materializzato — /scadenze è un registro di DATE; la visibilità
+    //   delle NC senza data è dominio futuro di Criticità 2.0. Non è un bug.
+    //   Un errore qui non deve MAI far fallire la chiusura del verbale.
+    try {
+      const { data: vRow } = await admin
+        .from("visite")
+        .select("modulo_id")
+        .eq("id", visita.id)
+        .single();
+      const { data: righeScad, error: scadQErr } = await admin
+        .from("risposte")
+        .select(
+          "id, domanda_id, sezione_id, valore, azione_correttiva, osservazione_evidenza, osservazioni, campo_extra"
+        )
+        .eq("visita_id", visita.id);
+      if (scadQErr) throw new Error(scadQErr.message);
+      const scadRows = derivaScadenzeMaterializzabili(
+        visita.template_snapshot,
+        (righeScad ?? []) as RispostaConId[]
+      );
+      const { error: matErr } = await admin.rpc("materializza_scadenze", {
+        p_visita_id: visita.id,
+        p_sede_id: visita.sede_id,
+        p_cliente_id: visita.cliente_id,
+        p_modulo_id: vRow?.modulo_id ?? null,
+        p_rows: scadRows,
+      });
+      if (matErr) throw new Error(matErr.message);
+    } catch (scadErr) {
+      console.error(
+        `materializzazione scadenze fallita (non bloccante) visitaId=${visita.id}:`,
+        scadErr instanceof Error ? scadErr.message : scadErr
+      );
+    }
 
     // 11-bis. Transizione dello slot collegato a 'eseguita' (Sprint 15.2, Opzione A).
     //   Il collegamento visita↔slot è ESPLICITO alla creazione visita (STEP 3):
