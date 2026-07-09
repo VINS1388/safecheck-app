@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManagePlanning } from "@/lib/auth/rbac";
 import { creaCliente } from "@/lib/db/queries/clienti";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 function opt(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? "").trim();
@@ -39,6 +40,14 @@ export async function creaClienteAction(formData: FormData) {
     indirizzo_sede_legale: opt(formData, "indirizzo_sede_legale"),
     referente_principale: opt(formData, "referente_principale"),
     email_referente: opt(formData, "email_referente"),
+  });
+
+  // Audit prima del redirect (che interrompe il flusso lanciando NEXT_REDIRECT).
+  await logAuditEvent({
+    entityType: "cliente",
+    entityId: id,
+    eventType: "cliente.creato",
+    actorUserId: user.id,
   });
 
   revalidatePath("/clienti");

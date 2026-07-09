@@ -27,6 +27,7 @@ import {
 import { isSnapshotHaccp } from "@/lib/checklist/haccpSnapshot";
 import { istanzeFormazione, genericheFormazione } from "@/lib/checklist/formazione";
 import { ricalcolaEsitiAutomatici } from "@/lib/scadenze/ricalcolo";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 export const runtime = "nodejs";
 
@@ -331,6 +332,23 @@ export async function POST(
       await admin.from("verbali_pdf").delete().eq("storage_path", storagePath);
       throw new Error(`Chiusura visita fallita: ${updErr.message}`);
     }
+
+    // Audit (best-effort, non bloccante, fuori dalla transazione di business):
+    // pdf generato + verbale chiuso. entity = il verbale (id = visita).
+    await logAuditEvent({
+      entityType: "verbale",
+      entityId: visita.id,
+      eventType: "verbale.pdf_generato",
+      actorUserId: user.id,
+      payload: { numero_verbale: numeroVerbale },
+    });
+    await logAuditEvent({
+      entityType: "verbale",
+      entityId: visita.id,
+      eventType: "verbale.chiuso",
+      actorUserId: user.id,
+      payload: { numero_verbale: numeroVerbale },
+    });
 
     // 11-bis. Transizione dello slot collegato a 'eseguita' (Sprint 15.2, Opzione A).
     //   Il collegamento visita↔slot è ESPLICITO alla creazione visita (STEP 3):

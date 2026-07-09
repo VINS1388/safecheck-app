@@ -8,6 +8,7 @@ import {
   collegaSlot,
   getModuloIdSlot,
 } from "@/lib/db/queries/pianificazione";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 /**
  * Crea una nuova visita in bozza "fuori piano" (nessuno slot da collegare) e
@@ -29,6 +30,14 @@ export async function nuovaVisitaAction(
     sedeId,
     specialistId: user.id,
     moduloId, // undefined → default sicurezza (sede mono-modulo, flusso invariato)
+  });
+
+  await logAuditEvent({
+    entityType: "visita",
+    entityId: visitaId,
+    eventType: "visita.creata",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId, sede_id: sedeId, fuori_piano: true },
   });
 
   redirect(`/visite/${visitaId}/avvia`);
@@ -66,6 +75,13 @@ export async function creaVisitaConSlotAction(
   if (scelta === "fuori-piano") {
     // Fuori piano: il modulo è quello scelto (o default sicurezza su sede mono-modulo).
     const visitaId = await creaVisita({ clienteId, sedeId, specialistId: user.id, moduloId });
+    await logAuditEvent({
+      entityType: "visita",
+      entityId: visitaId,
+      eventType: "visita.creata",
+      actorUserId: user.id,
+      payload: { cliente_id: clienteId, sede_id: sedeId, fuori_piano: true },
+    });
     return { ok: true, visitaId };
   }
 
@@ -87,12 +103,30 @@ export async function creaVisitaConSlotAction(
     moduloId: moduloSlot,
   });
 
+  await logAuditEvent({
+    entityType: "visita",
+    entityId: visitaId,
+    eventType: "visita.creata",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId, sede_id: sedeId, fuori_piano: false },
+  });
+
   const collegato = await collegaSlot(slotId, visitaId, user.id);
   if (!collegato) {
     // Corsa persa nella finestra tra re-verifica e collegamento: annulla la bozza.
+    // NB: nessun evento verbale.bozza_eliminata qui — è una compensazione tecnica
+    // della corsa, non un'eliminazione voluta dall'utente (Decisione chiusa).
     await eliminaVisitaBozza(visitaId);
     return { ok: false, error: conflitto };
   }
+
+  await logAuditEvent({
+    entityType: "visita",
+    entityId: visitaId,
+    eventType: "visita.slot_collegato",
+    actorUserId: user.id,
+    payload: { slot_id: slotId },
+  });
 
   return { ok: true, visitaId };
 }

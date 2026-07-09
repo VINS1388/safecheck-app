@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getVisitaById } from "@/lib/db/queries/visite";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,15 @@ export async function POST(
       { status: 500 }
     );
   }
+
+  // Audit (best-effort): UN solo evento, entity = il verbale ORIGINALE sostituito.
+  await logAuditEvent({
+    entityType: "verbale",
+    entityId: id,
+    eventType: "verbale.sostitutivo_creato",
+    actorUserId: user.id,
+    payload: { originale_id: id, nuovo_id: nuovoId },
+  });
 
   return NextResponse.json({ success: true, visita_id: nuovoId });
 }

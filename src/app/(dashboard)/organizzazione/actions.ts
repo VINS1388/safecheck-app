@@ -18,6 +18,13 @@ import {
   aggiornaProfiloOrganizzazione,
   type AggiornaProfiloOrgInput,
 } from "@/lib/server/org-profilo";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
+
+/** Id dell'attore corrente per l'audit (best-effort, mai bloccante). */
+async function attoreId(): Promise<string | null> {
+  return (await getCurrentUser()).user?.id ?? null;
+}
 
 /**
  * Server actions dell'area /organizzazione. Sottili: delegano al modulo dati
@@ -57,6 +64,13 @@ export async function creaUtenteAction(input: {
 }): Promise<CreaUtenteResult> {
   try {
     const r = await creaUtente(input);
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: r.utente.id,
+      eventType: "utente.creato",
+      actorUserId: await attoreId(),
+      payload: { ruolo: input.ruolo },
+    });
     revalidatePath("/organizzazione");
     return { ok: true, tempPassword: r.tempPassword, nome: r.utente.nome_completo, email: r.utente.email };
   } catch (e) {
@@ -72,6 +86,13 @@ export async function cambiaRuoloAction(
 ): Promise<AzioneResult> {
   try {
     await cambiaRuolo(userId, nuovoRuolo);
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: userId,
+      eventType: "utente.ruolo_modificato",
+      actorUserId: await attoreId(),
+      payload: { nuovo_ruolo: nuovoRuolo },
+    });
     revalidatePath("/organizzazione");
     return { ok: true };
   } catch (e) {
@@ -112,6 +133,12 @@ export async function impostaAttivoAction(
 ): Promise<AzioneResult> {
   try {
     await impostaAttivo(userId, attivo);
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: userId,
+      eventType: attivo ? "utente.riattivato" : "utente.disattivato",
+      actorUserId: await attoreId(),
+    });
     revalidatePath("/organizzazione");
     return { ok: true };
   } catch (e) {
@@ -126,6 +153,13 @@ export type ResetPasswordResult =
 export async function resetPasswordAction(userId: string): Promise<ResetPasswordResult> {
   try {
     const r = await resetPassword(userId);
+    // MAI la password nel payload: solo il fatto che il reset è avvenuto.
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: userId,
+      eventType: "utente.password_reset",
+      actorUserId: await attoreId(),
+    });
     return { ok: true, tempPassword: r.tempPassword };
   } catch (e) {
     return { ok: false, error: messaggioErrore(e) };
@@ -150,6 +184,12 @@ export async function dipendenzeUtenteAction(userId: string): Promise<Dipendenze
 export async function eliminaUtenteFisicoAction(userId: string): Promise<AzioneResult> {
   try {
     await eliminaUtenteFisico(userId);
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: userId,
+      eventType: "utente.eliminato_fisico",
+      actorUserId: await attoreId(),
+    });
     revalidatePath("/organizzazione");
     return { ok: true };
   } catch (e) {

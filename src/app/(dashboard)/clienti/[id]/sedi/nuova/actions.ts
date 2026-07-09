@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManagePlanning } from "@/lib/auth/rbac";
 import { creaSede } from "@/lib/db/queries/sedi";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 function opt(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? "").trim();
@@ -29,7 +30,7 @@ export async function creaSedeAction(formData: FormData) {
     throw new Error("Nome sede, indirizzo e città sono obbligatori.");
   }
 
-  await creaSede({
+  const sedeId = await creaSede({
     cliente_id: clienteId,
     nome,
     indirizzo,
@@ -38,6 +39,15 @@ export async function creaSedeAction(formData: FormData) {
     provincia: opt(formData, "provincia"),
     referente_sede: opt(formData, "referente_sede"),
     telefono_referente: opt(formData, "telefono_referente"),
+  });
+
+  // Audit prima del redirect (che interrompe il flusso lanciando NEXT_REDIRECT).
+  await logAuditEvent({
+    entityType: "sede",
+    entityId: sedeId,
+    eventType: "sede.creata",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId },
   });
 
   revalidatePath(`/clienti/${clienteId}`);

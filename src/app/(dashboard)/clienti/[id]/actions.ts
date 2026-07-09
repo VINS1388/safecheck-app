@@ -10,6 +10,7 @@ import {
   riattivaCliente,
   eliminaClienteFisico,
 } from "@/lib/db/queries/clienti";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 const ERR_PERM = encodeURIComponent("Non hai i permessi per questa operazione.");
 
@@ -58,6 +59,12 @@ export async function disattivaClienteAction(id: string) {
   if (!esito.ok) {
     redirect(`/clienti/${id}/modifica?err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "cliente",
+    entityId: id,
+    eventType: "cliente.disattivato",
+    actorUserId: user.id,
+  });
   revalidatePath("/clienti");
   revalidatePath("/dashboard");
   redirect(`/clienti?msg=${encodeURIComponent("Cliente disattivato.")}`);
@@ -73,6 +80,12 @@ export async function eliminaClienteFisicoAction(id: string) {
   if (!esito.ok) {
     redirect(`/clienti/${id}/modifica?err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "cliente",
+    entityId: id,
+    eventType: "cliente.eliminato_fisico",
+    actorUserId: user.id,
+  });
   revalidatePath("/clienti");
   revalidatePath("/dashboard");
   redirect(`/clienti?msg=${encodeURIComponent("Cliente eliminato definitivamente.")}`);
@@ -90,5 +103,11 @@ export async function riattivaClienteAction(id: string) {
   if (!esito.ok) {
     redirect(`/clienti?archiviati=1&err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "cliente",
+    entityId: id,
+    eventType: "cliente.riattivato",
+    actorUserId: user.id,
+  });
   redirect(`/clienti/${id}?msg=${encodeURIComponent("Cliente riattivato.")}`);
 }

@@ -11,6 +11,7 @@ import {
   eliminaSedeFisica,
   impostaSedePrincipale,
 } from "@/lib/db/queries/sedi";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 
 const ERR_PERM = encodeURIComponent("Non hai i permessi per questa operazione.");
 
@@ -57,6 +58,13 @@ export async function disattivaSedeAction(clienteId: string, sedeId: string) {
   if (!esito.ok) {
     redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "sede",
+    entityId: sedeId,
+    eventType: "sede.disattivata",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId },
+  });
   redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede disattivata.")}`);
 }
 
@@ -71,6 +79,13 @@ export async function riattivaSedeAction(clienteId: string, sedeId: string) {
   if (!esito.ok) {
     redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "sede",
+    entityId: sedeId,
+    eventType: "sede.riattivata",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId },
+  });
   redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede riattivata.")}`);
 }
 
@@ -85,6 +100,13 @@ export async function eliminaSedeFisicaAction(clienteId: string, sedeId: string)
   if (!esito.ok) {
     redirect(`/clienti/${clienteId}?err=${encodeURIComponent(esito.motivo)}`);
   }
+  await logAuditEvent({
+    entityType: "sede",
+    entityId: sedeId,
+    eventType: "sede.eliminata_fisica",
+    actorUserId: user.id,
+    payload: { cliente_id: clienteId },
+  });
   redirect(`/clienti/${clienteId}?msg=${encodeURIComponent("Sede eliminata definitivamente.")}`);
 }
 
