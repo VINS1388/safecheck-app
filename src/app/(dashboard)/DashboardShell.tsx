@@ -10,7 +10,6 @@ const NAV_BASE = [
   { href: "/clienti", label: "Clienti" },
   { href: "/visite", label: "Visite" },
   { href: "/pianificazione", label: "Pianificazione" },
-  { href: "/scadenze", label: "Scadenze" },
 ];
 // L'area /organizzazione è admin-only: il link compare solo per gli admin (il
 // layout server-side reindirizza comunque i non-admin che digitano l'URL).
