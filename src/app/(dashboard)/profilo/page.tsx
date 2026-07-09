@@ -2,13 +2,13 @@ import { redirect } from "next/navigation";
 import { getProfiloCorrente } from "@/lib/server/profilo";
 import { getProfiloOrganizzazione } from "@/lib/server/org-profilo";
 import { aggiornaProfiloAction } from "./actions";
+import PageHeader from "@/components/ui/PageHeader";
+import { Card, SectionCard } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import AlertBanner from "@/components/ui/AlertBanner";
+import { buttonClasses } from "@/components/ui/Button";
 
 export const metadata = { title: "Il mio profilo · SafeCheck" };
-
-const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
-const inputRO =
-  "mt-1 w-full cursor-not-allowed rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500";
 
 const RUOLO_LABEL: Record<string, string> = {
   admin: "Amministratore",
@@ -32,69 +32,61 @@ export default async function ProfiloPage({
 
   return (
     <main className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Il mio profilo</h1>
-        <p className="text-sm text-gray-500">
-          Aggiorna i tuoi dati anagrafici. Email e ruolo sono gestiti
-          dall&apos;amministratore.
-        </p>
-      </div>
+      <PageHeader
+        titolo="Il mio profilo"
+        sottotitolo="Aggiorna i tuoi dati anagrafici. Email e ruolo sono gestiti dall'amministratore."
+      />
 
       {msg && (
-        <p className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{msg}</p>
+        <AlertBanner variant="success" role="status" className="mb-4">
+          {msg}
+        </AlertBanner>
       )}
       {err && (
-        <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{err}</p>
+        <AlertBanner variant="danger" role="alert" className="mb-4">
+          {err}
+        </AlertBanner>
       )}
 
-      <form action={aggiornaProfiloAction} className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Nome completo <span className="text-red-500">*</span>
-          </label>
-          <input name="nome_completo" required defaultValue={profilo.nome_completo} className={inputCls} />
-        </div>
+      <Card padding="lg">
+        <form action={aggiornaProfiloAction} className="space-y-4">
+          <Field label="Nome completo" required>
+            <Input name="nome_completo" required defaultValue={profilo.nome_completo} />
+          </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Telefono</label>
-            <input name="telefono" defaultValue={profilo.telefono ?? ""} className={inputCls} placeholder="+39 …" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Telefono">
+              <Input name="telefono" defaultValue={profilo.telefono ?? ""} placeholder="+39 …" />
+            </Field>
+            <Field label="Qualifica">
+              <Input name="qualifica" defaultValue={profilo.qualifica ?? ""} placeholder="es. RSPP" />
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Qualifica</label>
-            <input name="qualifica" defaultValue={profilo.qualifica ?? ""} className={inputCls} placeholder="es. RSPP" />
-          </div>
-        </div>
 
-        <hr className="border-gray-100" />
-        <p className="text-xs uppercase tracking-wide text-gray-400">Gestiti dall&apos;amministratore</p>
+          <hr className="border-gray-100" />
+          <p className="text-xs uppercase tracking-wide text-gray-400">Gestiti dall&apos;amministratore</p>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-500">Email</label>
-            <input value={profilo.email} disabled className={inputRO} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Email">
+              <Input value={profilo.email} disabled />
+            </Field>
+            <Field label="Ruolo">
+              <Input value={RUOLO_LABEL[profilo.ruolo] ?? profilo.ruolo} disabled />
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500">Ruolo</label>
-            <input value={RUOLO_LABEL[profilo.ruolo] ?? profilo.ruolo} disabled className={inputRO} />
-          </div>
-        </div>
 
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
-          >
-            Salva modifiche
-          </button>
-        </div>
-      </form>
+          <div className="flex justify-end pt-2">
+            <button type="submit" className={buttonClasses("primary")}>
+              Salva modifiche
+            </button>
+          </div>
+        </form>
+      </Card>
 
       {/* Organizzazione (sola lettura per tutti; la modifica è in area admin) */}
       {org && (
-        <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-gray-900">Organizzazione</h2>
-          <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+        <SectionCard titolo="Organizzazione" className="mt-6">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             {(
               [
                 ["Ragione sociale", org.ragione_sociale],
@@ -115,7 +107,7 @@ export default async function ProfiloPage({
               </div>
             ))}
           </dl>
-        </section>
+        </SectionCard>
       )}
     </main>
   );

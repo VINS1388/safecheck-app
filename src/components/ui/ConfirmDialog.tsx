@@ -16,6 +16,8 @@ interface Props {
   aperto: boolean;
   onChiudi: () => void;
   titolo: string;
+  /** Sottotitolo opzionale sotto il titolo (es. "Nome · email" dell'entità). */
+  sottotitolo?: string;
   /** Testo/nodo del corpo del dialog. */
   children: React.ReactNode;
   onConferma?: () => void;
@@ -32,6 +34,7 @@ export default function ConfirmDialog({
   aperto,
   onChiudi,
   titolo,
+  sottotitolo,
   children,
   onConferma,
   testoConferma = "Conferma",
@@ -46,6 +49,7 @@ export default function ConfirmDialog({
       <div className="absolute inset-0 bg-black/40" onClick={onChiudi} />
       <div className="relative z-10 w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
         <h2 className="text-lg font-semibold text-gray-900">{titolo}</h2>
+        {sottotitolo && <p className="mt-0.5 text-sm text-gray-500">{sottotitolo}</p>}
         <div className="mt-3 space-y-3 text-sm text-gray-600">{children}</div>
         <div className="mt-5 flex justify-end gap-3">
           {azioni ?? (

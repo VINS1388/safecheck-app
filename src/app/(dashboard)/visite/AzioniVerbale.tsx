@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { StatoVerbaleUI } from "@/components/ui/StatoBadge";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AlertBanner from "@/components/ui/AlertBanner";
 import { eliminaBozzaAction } from "./actions";
 
 const LINK = "font-medium text-brand hover:underline disabled:opacity-40";
@@ -24,6 +26,7 @@ export default function AzioniVerbale({ visitaId, stato }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | "duplica" | "sostitutivo" | "elimina">(null);
   const [errore, setErrore] = useState<string | null>(null);
+  const [confermaElimina, setConfermaElimina] = useState(false);
 
   async function clona(tipo: "duplica" | "sostitutivo") {
     setBusy(tipo);
@@ -39,12 +42,12 @@ export default function AzioniVerbale({ visitaId, stato }: Props) {
     }
   }
 
-  async function elimina() {
-    if (!window.confirm("Eliminare definitivamente questa bozza? L'operazione non è reversibile.")) return;
+  async function eseguiElimina() {
     setBusy("elimina");
     setErrore(null);
     const res = await eliminaBozzaAction(visitaId);
     if (res.ok) {
+      setConfermaElimina(false);
       router.refresh();
     } else {
       setBusy(null);
@@ -60,7 +63,7 @@ export default function AzioniVerbale({ visitaId, stato }: Props) {
             <Link href={`/visite/${visitaId}/avvia`} className={LINK}>
               Continua
             </Link>
-            <button type="button" onClick={elimina} disabled={busy !== null} className="font-medium text-red-600 hover:underline disabled:opacity-40">
+            <button type="button" onClick={() => setConfermaElimina(true)} disabled={busy !== null} className="font-medium text-red-600 hover:underline disabled:opacity-40">
               {busy === "elimina" ? "…" : "Elimina"}
             </button>
           </>
@@ -85,7 +88,24 @@ export default function AzioniVerbale({ visitaId, stato }: Props) {
           </>
         )}
       </div>
-      {errore && <span className="text-xs text-red-600">{errore}</span>}
+      {errore && !confermaElimina && <span className="text-xs text-red-600">{errore}</span>}
+
+      <ConfirmDialog
+        aperto={confermaElimina}
+        onChiudi={() => {
+          if (busy === "elimina") return;
+          setConfermaElimina(false);
+          setErrore(null);
+        }}
+        titolo="Elimina bozza"
+        variante="danger"
+        onConferma={eseguiElimina}
+        testoConferma={busy === "elimina" ? "Eliminazione…" : "Elimina"}
+        confermaDisabilitata={busy === "elimina"}
+      >
+        <p>Eliminare definitivamente questa bozza? L&apos;operazione non è reversibile.</p>
+        {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
+      </ConfirmDialog>
     </div>
   );
 }

@@ -3,6 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import Button, { buttonClasses } from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
+import RoleBadge from "@/components/ui/RoleBadge";
+import AlertBanner from "@/components/ui/AlertBanner";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DataTable, { type Column } from "@/components/ui/DataTable";
+import { Field, Input, Select } from "@/components/ui/Field";
 import {
   creaUtenteAction,
   cambiaRuoloAction,
@@ -24,21 +33,9 @@ const RUOLO_LABEL: Record<RuoloUtente, string> = {
   planner: "Pianificatore",
   specialist: "Tecnico",
 };
-const RUOLO_BADGE: Record<RuoloUtente, string> = {
-  admin: "bg-purple-100 text-purple-700",
-  planner: "bg-blue-100 text-blue-700",
-  specialist: "bg-teal-100 text-teal-700",
-};
 const RUOLI: RuoloUtente[] = ["admin", "planner", "specialist"];
-
-const inputCls =
-  "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand";
-const btnPrimary =
-  "inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50";
-const btnSecondary =
-  "inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50";
 const LOCKOUT_MSG =
-  "Non puoi disattivare o retrocedere l'unico admin attivo dell'organizzazione";
+  "Deve rimanere almeno un admin attivo.";
 
 function formattaData(iso: string): string {
   try {
@@ -111,20 +108,45 @@ export default function OrganizzazioneClient({
     router.refresh();
   };
 
+  const columns: Column<UtenteLista>[] = [
+    {
+      header: "Utente",
+      cell: (u) => (
+        <div>
+          <p className="font-medium text-gray-900">{u.nome_completo}</p>
+          <p className="text-xs text-gray-500">{u.email}</p>
+        </div>
+      ),
+    },
+    { header: "Ruolo", cell: (u) => <RoleBadge ruolo={u.ruolo} etichetta={RUOLO_LABEL[u.ruolo]} /> },
+    { header: "Stato", cell: (u) => <StatoUtente attivo={u.attivo} /> },
+    { header: "Creato", className: "text-gray-500", cell: (u) => formattaData(u.creato_il) },
+    {
+      header: "Azioni",
+      align: "right",
+      cell: (u) => (
+        <RigaAzioni
+          utente={u}
+          isLastAdmin={u.id === lastActiveAdminId}
+          onModifica={() => setModal({ type: "anagrafica", utente: u })}
+          onRuolo={() => setModal({ type: "ruolo", utente: u })}
+          onReset={() => setModal({ type: "reset", utente: u })}
+          onStato={() => setModal({ type: "stato", utente: u })}
+          onElimina={() => setModal({ type: "elimina", utente: u })}
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Organizzazione</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Gestisci utenti, ruoli e accessi alla piattaforma
-          </p>
-        </div>
-        <button type="button" className={`${btnPrimary} w-full sm:w-auto`} onClick={() => setModal({ type: "aggiungi" })}>
-          + Aggiungi utente
-        </button>
-      </div>
+      <PageHeader
+        titolo="Organizzazione"
+        sottotitolo="Gestisci utenti, ruoli e accessi alla piattaforma."
+        azioni={
+          <Button onClick={() => setModal({ type: "aggiungi" })}>+ Aggiungi utente</Button>
+        }
+      />
 
       {/* Profilo Organizzazione (dati reali, migration 031). Lettura: tutti;
           scrittura: admin — qui siamo in area admin-only, quindi editabile. */}
@@ -169,18 +191,17 @@ export default function OrganizzazioneClient({
 
       {/* Ricerca + filtri */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <input
+        <Input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Cerca per nome o email…"
-          className={`${inputCls} mt-0 sm:max-w-xs`}
+          className="sm:max-w-xs"
         />
         <div className="flex gap-3">
-          <select
+          <Select
             value={filtroRuolo}
             onChange={(e) => setFiltroRuolo(e.target.value as "tutti" | RuoloUtente)}
-            className={`${inputCls} mt-0`}
             aria-label="Filtra per ruolo"
           >
             <option value="tutti">Tutti i ruoli</option>
@@ -189,106 +210,61 @@ export default function OrganizzazioneClient({
                 {RUOLO_LABEL[r]}
               </option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             value={filtroStato}
             onChange={(e) => setFiltroStato(e.target.value as "tutti" | "attivi" | "disattivati")}
-            className={`${inputCls} mt-0`}
             aria-label="Filtra per stato"
           >
             <option value="tutti">Tutti gli stati</option>
             <option value="attivi">Solo attivi</option>
             <option value="disattivati">Solo disattivati</option>
-          </select>
+          </Select>
         </div>
       </div>
 
       {/* Lista */}
-      {filtrati.length === 0 ? (
-        <EmptyState
-          titolo="Nessun utente trovato"
-          descrizione={
-            utenti.length === 0
-              ? "Aggiungi il primo utente dell'organizzazione."
-              : "Nessun utente corrisponde ai filtri selezionati."
-          }
-        />
-      ) : (
-        <>
-          {/* Desktop: tabella */}
-          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Utente</th>
-                  <th className="px-4 py-3 font-medium">Ruolo</th>
-                  <th className="px-4 py-3 font-medium">Stato</th>
-                  <th className="px-4 py-3 font-medium">Creato</th>
-                  <th className="px-4 py-3 text-right font-medium">Azioni</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filtrati.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{u.nome_completo}</p>
-                      <p className="text-xs text-gray-500">{u.email}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <RuoloBadge ruolo={u.ruolo} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatoBadgeUtente attivo={u.attivo} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{formattaData(u.creato_il)}</td>
-                    <td className="px-4 py-3">
-                      <RigaAzioni
-                        utente={u}
-                        isLastAdmin={u.id === lastActiveAdminId}
-                        onModifica={() => setModal({ type: "anagrafica", utente: u })}
-                        onRuolo={() => setModal({ type: "ruolo", utente: u })}
-                        onReset={() => setModal({ type: "reset", utente: u })}
-                        onStato={() => setModal({ type: "stato", utente: u })}
-                        onElimina={() => setModal({ type: "elimina", utente: u })}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile: card */}
-          <div className="space-y-3 sm:hidden">
-            {filtrati.map((u) => (
-              <div key={u.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{u.nome_completo}</p>
-                    <p className="truncate text-xs text-gray-500">{u.email}</p>
-                  </div>
-                  <StatoBadgeUtente attivo={u.attivo} />
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <RuoloBadge ruolo={u.ruolo} />
-                  <span className="text-xs text-gray-400">· creato {formattaData(u.creato_il)}</span>
-                </div>
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  <RigaAzioni
-                    utente={u}
-                    isLastAdmin={u.id === lastActiveAdminId}
-                    onModifica={() => setModal({ type: "anagrafica", utente: u })}
-                    onRuolo={() => setModal({ type: "ruolo", utente: u })}
-                    onReset={() => setModal({ type: "reset", utente: u })}
-                    onStato={() => setModal({ type: "stato", utente: u })}
-                    onElimina={() => setModal({ type: "elimina", utente: u })}
-                  />
-                </div>
+      <DataTable
+        columns={columns}
+        rows={filtrati}
+        keyOf={(u) => u.id}
+        renderCard={(u) => (
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{u.nome_completo}</p>
+                <p className="truncate text-xs text-gray-500">{u.email}</p>
               </div>
-            ))}
+              <StatoUtente attivo={u.attivo} />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <RoleBadge ruolo={u.ruolo} etichetta={RUOLO_LABEL[u.ruolo]} />
+              <span className="text-xs text-gray-400">· creato {formattaData(u.creato_il)}</span>
+            </div>
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <RigaAzioni
+                utente={u}
+                isLastAdmin={u.id === lastActiveAdminId}
+                onModifica={() => setModal({ type: "anagrafica", utente: u })}
+                onRuolo={() => setModal({ type: "ruolo", utente: u })}
+                onReset={() => setModal({ type: "reset", utente: u })}
+                onStato={() => setModal({ type: "stato", utente: u })}
+                onElimina={() => setModal({ type: "elimina", utente: u })}
+              />
+            </div>
           </div>
-        </>
-      )}
+        )}
+        vuoto={
+          <EmptyState
+            titolo="Nessun utente trovato"
+            descrizione={
+              utenti.length === 0
+                ? "Aggiungi il primo utente dell'organizzazione."
+                : "Nessun utente corrisponde ai filtri selezionati."
+            }
+          />
+        }
+      />
 
       {/* Dialoghi */}
       {modal?.type === "aggiungi" && (
@@ -357,33 +333,17 @@ export default function OrganizzazioneClient({
 // ── Sotto-componenti presentazione ───────────────────────────────────────────
 function StatTile({ label, valore }: { label: string; valore: number }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <Card padding="md">
       <p className="text-2xl font-bold text-gray-900">{valore}</p>
       <p className="mt-0.5 text-xs text-gray-500">{label}</p>
-    </div>
+    </Card>
   );
 }
 
-function RuoloBadge({ ruolo }: { ruolo: RuoloUtente }) {
-  return (
-    <span
-      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${RUOLO_BADGE[ruolo]}`}
-    >
-      {RUOLO_LABEL[ruolo]}
-    </span>
-  );
-}
-
-function StatoBadgeUtente({ attivo }: { attivo: boolean }) {
-  return (
-    <span
-      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-        attivo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-      }`}
-    >
-      {attivo ? "Attivo" : "Disattivato"}
-    </span>
-  );
+// Stato utente = STATO (non ruolo): tono semantico del design system.
+// Attivo = success (verde) · disattivato = neutral (grigio, text-gray-600 via Badge).
+function StatoUtente({ attivo }: { attivo: boolean }) {
+  return <Badge tone={attivo ? "success" : "neutral"}>{attivo ? "Attivo" : "Disattivato"}</Badge>;
 }
 
 function RigaAzioni({
@@ -404,27 +364,16 @@ function RigaAzioni({
   onElimina: () => void;
 }) {
   const azioneStatoBloccata = utente.attivo && isLastAdmin; // disattivare l'ultimo admin
+  const azioneLink = "min-h-[36px] rounded-md px-2.5 py-1.5 text-xs font-medium";
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <button
-        type="button"
-        onClick={onModifica}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
-      >
+      <button type="button" onClick={onModifica} className={`${azioneLink} text-brand hover:bg-brand/10`}>
         Modifica
       </button>
-      <button
-        type="button"
-        onClick={onRuolo}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
-      >
+      <button type="button" onClick={onRuolo} className={`${azioneLink} text-brand hover:bg-brand/10`}>
         Ruolo
       </button>
-      <button
-        type="button"
-        onClick={onReset}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
-      >
+      <button type="button" onClick={onReset} className={`${azioneLink} text-brand hover:bg-brand/10`}>
         Reset password
       </button>
       {utente.attivo ? (
@@ -433,57 +382,19 @@ function RigaAzioni({
           onClick={onStato}
           disabled={azioneStatoBloccata}
           title={azioneStatoBloccata ? LOCKOUT_MSG : undefined}
-          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
+          className={`${azioneLink} text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent`}
         >
           Disattiva
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={onStato}
-          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50"
-        >
+        <button type="button" onClick={onStato} className={`${azioneLink} text-green-700 hover:bg-green-50`}>
           Riattiva
         </button>
       )}
-      <button
-        type="button"
-        onClick={onElimina}
-        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-      >
+      <button type="button" onClick={onElimina} className={`${azioneLink} text-red-600 hover:bg-red-50`}>
         Elimina
       </button>
     </div>
-  );
-}
-
-// ── Modal base ───────────────────────────────────────────────────────────────
-function Modal({
-  titolo,
-  sottotitolo,
-  onClose,
-  children,
-}: {
-  titolo: string;
-  sottotitolo?: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
-        <h2 className="text-lg font-semibold text-gray-900">{titolo}</h2>
-        {sottotitolo && <p className="mt-0.5 text-sm text-gray-500">{sottotitolo}</p>}
-        <div className="mt-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function ErroreBox({ messaggio }: { messaggio: string }) {
-  return (
-    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{messaggio}</p>
   );
 }
 
@@ -515,58 +426,40 @@ function DialogAggiungi({
   }
 
   return (
-    <Modal titolo="Aggiungi utente" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Nome completo <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={inputCls}
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            required
-            placeholder="Mario Rossi"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={inputCls}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="mario.rossi@studio.it"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Ruolo</label>
-          <select
-            className={inputCls}
-            value={ruolo}
-            onChange={(e) => setRuolo(e.target.value as RuoloUtente)}
-          >
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Aggiungi utente"
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Annulla
+          </Button>
+          <button type="submit" form="form-aggiungi-utente" className={buttonClasses("primary")} disabled={busy}>
+            {busy ? "Creazione…" : "Crea utente"}
+          </button>
+        </>
+      }
+    >
+      <form id="form-aggiungi-utente" onSubmit={submit} className="space-y-4">
+        <Field label="Nome completo" required>
+          <Input value={nome} onChange={(e) => setNome(e.target.value)} required placeholder="Mario Rossi" />
+        </Field>
+        <Field label="Email" required>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="mario.rossi@studio.it" />
+        </Field>
+        <Field label="Ruolo">
+          <Select value={ruolo} onChange={(e) => setRuolo(e.target.value as RuoloUtente)}>
             {RUOLI.map((r) => (
               <option key={r} value={r}>
                 {RUOLO_LABEL[r]}
               </option>
             ))}
-          </select>
-        </div>
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
-            Annulla
-          </button>
-          <button type="submit" className={btnPrimary} disabled={busy}>
-            {busy ? "Creazione…" : "Crea utente"}
-          </button>
-        </div>
+          </Select>
+        </Field>
+        {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
       </form>
-    </Modal>
+    </ConfirmDialog>
   );
 }
 
@@ -620,63 +513,59 @@ function DialogModificaOrganizzazione({
   }
 
   return (
-    <Modal titolo="Profilo organizzazione" sottotitolo="Dati dello studio, visibili a tutti gli utenti" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Ragione sociale <span className="text-red-500">*</span>
-          </label>
-          <input className={inputCls} value={f.ragione_sociale} onChange={set("ragione_sociale")} required />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Partita IVA</label>
-            <input className={inputCls} value={f.partita_iva} onChange={set("partita_iva")} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Codice fiscale</label>
-            <input className={inputCls} value={f.codice_fiscale} onChange={set("codice_fiscale")} />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Indirizzo</label>
-          <input className={inputCls} value={f.indirizzo} onChange={set("indirizzo")} />
-        </div>
-        <div className="grid grid-cols-6 gap-4">
-          <div className="col-span-3">
-            <label className="block text-sm font-medium text-gray-700">Città</label>
-            <input className={inputCls} value={f.citta} onChange={set("citta")} />
-          </div>
-          <div className="col-span-1">
-            <label className="block text-sm font-medium text-gray-700">CAP</label>
-            <input className={inputCls} value={f.cap} onChange={set("cap")} />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Provincia</label>
-            <input className={`${inputCls} uppercase`} maxLength={2} value={f.provincia} onChange={set("provincia")} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input className={inputCls} type="email" value={f.email} onChange={set("email")} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Telefono</label>
-            <input className={inputCls} value={f.telefono} onChange={set("telefono")} />
-          </div>
-        </div>
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Profilo organizzazione"
+      sottotitolo="Dati dello studio, visibili a tutti gli utenti"
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Annulla
-          </button>
-          <button type="submit" className={btnPrimary} disabled={busy}>
+          </Button>
+          <button type="submit" form="form-org" className={buttonClasses("primary")} disabled={busy}>
             {busy ? "Salvataggio…" : "Salva"}
           </button>
+        </>
+      }
+    >
+      <form id="form-org" onSubmit={submit} className="space-y-4">
+        <Field label="Ragione sociale" required>
+          <Input value={f.ragione_sociale} onChange={set("ragione_sociale")} required />
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Partita IVA">
+            <Input value={f.partita_iva} onChange={set("partita_iva")} />
+          </Field>
+          <Field label="Codice fiscale">
+            <Input value={f.codice_fiscale} onChange={set("codice_fiscale")} />
+          </Field>
         </div>
+        <Field label="Indirizzo">
+          <Input value={f.indirizzo} onChange={set("indirizzo")} />
+        </Field>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+          <Field label="Città" className="col-span-2 sm:col-span-3">
+            <Input value={f.citta} onChange={set("citta")} />
+          </Field>
+          <Field label="CAP" className="col-span-1">
+            <Input value={f.cap} onChange={set("cap")} />
+          </Field>
+          <Field label="Provincia" className="col-span-1 sm:col-span-2">
+            <Input maxLength={2} value={f.provincia} onChange={set("provincia")} className="uppercase" />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Email">
+            <Input type="email" value={f.email} onChange={set("email")} />
+          </Field>
+          <Field label="Telefono">
+            <Input value={f.telefono} onChange={set("telefono")} />
+          </Field>
+        </div>
+        {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
       </form>
-    </Modal>
+    </ConfirmDialog>
   );
 }
 
@@ -713,38 +602,40 @@ function DialogModificaUtente({
   }
 
   return (
-    <Modal titolo="Modifica dati utente" sottotitolo={utente.email} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Nome completo <span className="text-red-500">*</span>
-          </label>
-          <input className={inputCls} value={nome} onChange={(e) => setNome(e.target.value)} required />
-        </div>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Modifica dati utente"
+      sottotitolo={utente.email}
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Annulla
+          </Button>
+          <button type="submit" form="form-anagrafica" className={buttonClasses("primary")} disabled={busy}>
+            {busy ? "Salvataggio…" : "Salva"}
+          </button>
+        </>
+      }
+    >
+      <form id="form-anagrafica" onSubmit={submit} className="space-y-4">
+        <Field label="Nome completo" required>
+          <Input value={nome} onChange={(e) => setNome(e.target.value)} required />
+        </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Telefono</label>
-            <input className={inputCls} value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Qualifica</label>
-            <input className={inputCls} value={qualifica} onChange={(e) => setQualifica(e.target.value)} />
-          </div>
+          <Field label="Telefono">
+            <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </Field>
+          <Field label="Qualifica">
+            <Input value={qualifica} onChange={(e) => setQualifica(e.target.value)} />
+          </Field>
         </div>
         <p className="text-xs text-gray-400">
           Ruolo, stato ed email non si modificano da qui (email non è modificabile).
         </p>
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
-            Annulla
-          </button>
-          <button type="submit" className={btnPrimary} disabled={busy}>
-            {busy ? "Salvataggio…" : "Salva"}
-          </button>
-        </div>
+        {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
       </form>
-    </Modal>
+    </ConfirmDialog>
   );
 }
 
@@ -780,45 +671,40 @@ function DialogRuolo({
   }
 
   return (
-    <Modal titolo="Modifica ruolo" sottotitolo={`${utente.nome_completo} · ${utente.email}`} onClose={onClose}>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Nuovo ruolo</label>
-          <select
-            className={inputCls}
-            value={ruolo}
-            onChange={(e) => setRuolo(e.target.value as RuoloUtente)}
-          >
-            {RUOLI.map((r) => (
-              <option key={r} value={r}>
-                {RUOLO_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </div>
-        {!invariato && !retrocessioneVietata && (
-          <p className="text-sm text-gray-600">
-            Stai modificando il ruolo di <strong>{utente.nome_completo}</strong> da{" "}
-            {RUOLO_LABEL[utente.ruolo]} a {RUOLO_LABEL[ruolo]}. Confermi?
-          </p>
-        )}
-        {retrocessioneVietata && <ErroreBox messaggio={LOCKOUT_MSG} />}
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Modifica ruolo"
+      sottotitolo={`${utente.nome_completo} · ${utente.email}`}
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Annulla
-          </button>
-          <button
-            type="button"
-            className={btnPrimary}
-            onClick={conferma}
-            disabled={busy || invariato || retrocessioneVietata}
-          >
+          </Button>
+          <Button onClick={conferma} disabled={busy || invariato || retrocessioneVietata}>
             {busy ? "Salvataggio…" : "Conferma"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+          </Button>
+        </>
+      }
+    >
+      <Field label="Nuovo ruolo">
+        <Select value={ruolo} onChange={(e) => setRuolo(e.target.value as RuoloUtente)}>
+          {RUOLI.map((r) => (
+            <option key={r} value={r}>
+              {RUOLO_LABEL[r]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {!invariato && !retrocessioneVietata && (
+        <p>
+          Stai modificando il ruolo di <strong>{utente.nome_completo}</strong> da{" "}
+          {RUOLO_LABEL[utente.ruolo]} a {RUOLO_LABEL[ruolo]}. Confermi?
+        </p>
+      )}
+      {retrocessioneVietata && <AlertBanner variant="danger" role="alert">{LOCKOUT_MSG}</AlertBanner>}
+      {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
+    </ConfirmDialog>
   );
 }
 
@@ -847,24 +733,29 @@ function DialogReset({
   }
 
   return (
-    <Modal titolo="Reset password" sottotitolo={`${utente.nome_completo} · ${utente.email}`} onClose={onClose}>
-      <div className="space-y-4">
-        <p className="text-sm text-gray-600">
-          Verrà generata una nuova password temporanea per{" "}
-          <strong>{utente.nome_completo}</strong>. La password attuale smetterà di funzionare
-          immediatamente. Confermi?
-        </p>
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Reset password"
+      sottotitolo={`${utente.nome_completo} · ${utente.email}`}
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Annulla
-          </button>
-          <button type="button" className={btnPrimary} onClick={conferma} disabled={busy}>
+          </Button>
+          <Button onClick={conferma} disabled={busy}>
             {busy ? "Generazione…" : "Reimposta password"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Verrà generata una nuova password temporanea per{" "}
+        <strong>{utente.nome_completo}</strong>. La password attuale smetterà di funzionare
+        immediatamente. Confermi?
+      </p>
+      {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
+    </ConfirmDialog>
   );
 }
 
@@ -908,52 +799,44 @@ function DialogStato({
   }
 
   return (
-    <Modal
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
       titolo={disattiva ? "Disattiva utente" : "Riattiva utente"}
       sottotitolo={`${utente.nome_completo} · ${utente.email}`}
-      onClose={onClose}
-    >
-      <div className="space-y-4">
-        <p className="text-sm text-gray-600">
-          {disattiva ? (
-            <>
-              <strong>{utente.nome_completo}</strong> non potrà più accedere alla piattaforma finché
-              non verrà riattivato. Confermi?
-            </>
-          ) : (
-            <>
-              <strong>{utente.nome_completo}</strong> potrà nuovamente accedere alla piattaforma.
-              Confermi?
-            </>
-          )}
-        </p>
-        {disattiva && slotImpattati != null && slotImpattati > 0 && (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            {slotImpattati === 1
-              ? "1 slot di pianificazione futuro è assegnato a questo tecnico. Resterà assegnato a lui, segnalato come «Tecnico disattivato» nella pianificazione, finché non lo riassegni manualmente. La disattivazione non lo rimuove."
-              : `${slotImpattati} slot di pianificazione futuri sono assegnati a questo tecnico. Resteranno assegnati a lui, segnalati come «Tecnico disattivato» nella pianificazione, finché non li riassegni manualmente. La disattivazione non li rimuove.`}
-          </p>
-        )}
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Annulla
-          </button>
-          <button
-            type="button"
-            className={
-              disattiva
-                ? "inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
-                : btnPrimary
-            }
-            onClick={conferma}
-            disabled={busy}
-          >
+          </Button>
+          <Button variant={disattiva ? "danger" : "primary"} onClick={conferma} disabled={busy}>
             {busy ? "Attendere…" : disattiva ? "Disattiva" : "Riattiva"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+          </Button>
+        </>
+      }
+    >
+      <p>
+        {disattiva ? (
+          <>
+            <strong>{utente.nome_completo}</strong> non potrà più accedere alla piattaforma finché
+            non verrà riattivato. Confermi?
+          </>
+        ) : (
+          <>
+            <strong>{utente.nome_completo}</strong> potrà nuovamente accedere alla piattaforma.
+            Confermi?
+          </>
+        )}
+      </p>
+      {disattiva && slotImpattati != null && slotImpattati > 0 && (
+        <AlertBanner variant="warning">
+          {slotImpattati === 1
+            ? "1 slot di pianificazione futuro è assegnato a questo tecnico. Resterà assegnato a lui, segnalato come «Tecnico disattivato» nella pianificazione, finché non lo riassegni manualmente. La disattivazione non lo rimuove."
+            : `${slotImpattati} slot di pianificazione futuri sono assegnati a questo tecnico. Resteranno assegnati a lui, segnalati come «Tecnico disattivato» nella pianificazione, finché non li riassegni manualmente. La disattivazione non li rimuove.`}
+        </AlertBanner>
+      )}
+      {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
+    </ConfirmDialog>
   );
 }
 
@@ -1009,37 +892,37 @@ function DialogElimina({
     : [];
 
   return (
-    <Modal titolo="Elimina definitivamente" sottotitolo={`${utente.nome_completo} · ${utente.email}`} onClose={onClose}>
-      <div className="space-y-4">
-        {caricando ? (
-          <p className="text-sm text-gray-500">Verifica dei dati collegati…</p>
-        ) : dip?.eliminabile ? (
-          <p className="text-sm text-gray-600">
-            L&apos;utente non ha dati collegati. L&apos;eliminazione è definitiva e{" "}
-            <strong>non reversibile</strong>. Per un utente con storico usa invece la disattivazione.
-          </p>
-        ) : (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Non eliminabile: l&apos;utente ha {blocchi.join(", ")}. Usa la disattivazione per
-            revocargli l&apos;accesso mantenendo lo storico.
-          </p>
-        )}
-        {errore && <ErroreBox messaggio={errore} />}
-        <div className="flex justify-end gap-3 pt-1">
-          <button type="button" className={btnSecondary} onClick={onClose} disabled={busy}>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo="Elimina definitivamente"
+      sottotitolo={`${utente.nome_completo} · ${utente.email}`}
+      azioni={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Annulla
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
-            onClick={conferma}
-            disabled={busy || caricando || !dip?.eliminabile}
-          >
+          </Button>
+          <Button variant="danger" onClick={conferma} disabled={busy || caricando || !dip?.eliminabile}>
             {busy ? "Eliminazione…" : "Elimina definitivamente"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+          </Button>
+        </>
+      }
+    >
+      {caricando ? (
+        <p className="text-gray-500">Verifica dei dati collegati…</p>
+      ) : dip?.eliminabile ? (
+        <p>
+          L&apos;utente non ha dati collegati. L&apos;eliminazione è definitiva e{" "}
+          <strong>non reversibile</strong>. Per un utente con storico usa invece la disattivazione.
+        </p>
+      ) : (
+        <AlertBanner variant="warning">
+          Non eliminabile: l&apos;utente ha {blocchi.join(", ")}. Usa la disattivazione per
+          revocargli l&apos;accesso mantenendo lo storico.
+        </AlertBanner>
+      )}
+      {errore && <AlertBanner variant="danger" role="alert">{errore}</AlertBanner>}
+    </ConfirmDialog>
   );
 }
 
@@ -1068,31 +951,30 @@ function DialogPassword({
   }
 
   return (
-    <Modal titolo={titolo} sottotitolo={sottotitolo} onClose={onClose}>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">
-            Password temporanea
-          </label>
-          <div className="mt-1 flex items-center gap-2">
-            <code className="flex-1 select-all break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900">
-              {password}
-            </code>
-            <button type="button" className={btnSecondary} onClick={copia}>
-              {copiato ? "Copiato" : "Copia"}
-            </button>
-          </div>
-        </div>
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Salva ora questa password: non sarà più visibile dopo la chiusura di questa finestra.
-          Comunicala all&apos;utente tramite un canale sicuro.
-        </p>
-        <div className="flex justify-end pt-1">
-          <button type="button" className={btnPrimary} onClick={onClose}>
-            Ho salvato la password
-          </button>
+    <ConfirmDialog
+      aperto
+      onChiudi={onClose}
+      titolo={titolo}
+      sottotitolo={sottotitolo}
+      azioni={<Button onClick={onClose}>Ho salvato la password</Button>}
+    >
+      <div>
+        <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">
+          Password temporanea
+        </label>
+        <div className="mt-1 flex items-center gap-2">
+          <code className="flex-1 select-all break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900">
+            {password}
+          </code>
+          <Button variant="secondary" onClick={copia}>
+            {copiato ? "Copiato" : "Copia"}
+          </Button>
         </div>
       </div>
-    </Modal>
+      <AlertBanner variant="warning">
+        Salva ora questa password: non sarà più visibile dopo la chiusura di questa finestra.
+        Comunicala all&apos;utente tramite un canale sicuro.
+      </AlertBanner>
+    </ConfirmDialog>
   );
 }

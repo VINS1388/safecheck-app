@@ -101,7 +101,8 @@ export async function aggiornaProfiloOrganizzazioneAction(
     revalidatePath("/profilo");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Operazione non completata." };
+    // Linguaggio errori unificato (S6): mai un errore grezzo Supabase all'utente.
+    return { ok: false, error: messaggioErrore(e) };
   }
 }
 

@@ -1,131 +1,128 @@
-# SafeCheck — Design Tokens
+# SafeCheck — Design Tokens & UI System
 
-Censimento del design system in uso (Sprint 15.1). SafeCheck usa **Tailwind CSS v4**
-(`@import "tailwindcss"` in `globals.css`), **senza** libreria di componenti
-(nessun shadcn/ui, nessuna cartella `src/components/ui` prima di Sprint 15.1).
-La UI è colocata nelle route; da Sprint 15.1 i componenti trasversali di stato
-stanno in `src/components/ui/`.
+Riferimento operativo del design system, consolidato a chiusura dello **Sprint 16.5
+(S1→S6)**. Stack: **Tailwind CSS v4** (`@import "tailwindcss"` in `globals.css`),
+primitive proprietarie in **`src/components/ui/`** (nessuna libreria esterna).
 
-## Colori brand — TOKEN (Sprint 16.5 · S1)
+Regola d'oro: **usa le primitive**. Non replicare a mano classi di card, bottoni,
+input, badge, dialog o tabelle già coperti da una primitiva.
 
-Da S1 il navy di brand è un **token `@theme`** in `globals.css`, non più un
-letterale hex sparso. Le utility sono generate da Tailwind v4:
+---
 
-| Token `@theme` | Valore | Utility generate | Uso |
+## 1. Token colore brand (`@theme` in `globals.css`)
+
+| Token | Valore | Utility | Uso |
 |---|---|---|---|
-| `--color-brand` | `#1e3a5f` (navy pieno) | `bg-brand`, `text-brand`, `border-brand`, `ring-brand`, `from-brand`, `bg-brand/10`… | primari, link, accenti, header, ruolo **admin** |
-| `--color-brand-hover` | `#16304e` | `hover:bg-brand-hover` | hover dei bottoni primari |
-| `--color-brand-soft` | `#2c5480` (navy intermedio) | `to-brand-soft`, `bg-brand-soft`… | gradient; ruolo **planner** (applicazione badge in S2) |
-| `--background` (`:root`) | `#f8f9fa` | var CSS | sfondo pagina |
-| `--foreground` (`:root`) | `#171717` | var CSS | testo base |
+| `--color-brand` | `#1e3a5f` | `bg-brand`, `text-brand`, `border-brand`, `ring-brand`, `bg-brand/10`… | primari, link, accenti, ruolo **admin** |
+| `--color-brand-hover` | `#16304e` | `hover:bg-brand-hover` | hover bottoni primari |
+| `--color-brand-soft` | `#2c5480` | `bg-brand-soft`, `to-brand-soft` | gradient; ruolo **planner** |
+| `--background` / `--foreground` | `#f8f9fa` / `#171717` | var CSS | sfondo / testo base |
 
-> **Migrazione S1:** 188 sostituzioni su 37 file — `bg-[#1e3a5f]`→`bg-brand`,
-> `hover:bg-[#16304e]`→`hover:bg-brand-hover`, `to-[#2c5480]`→`to-brand-soft`.
-> Resa invariata: i valori dei token sono identici agli hex precedenti; in
-> Tailwind v4 anche i modificatori d'opacità (`bg-brand/10`) compilano come
-> le vecchie forme arbitrarie. Build/tsc/eslint verdi.
+In v4 anche i modificatori d'opacità (`bg-brand/10`) e i gradient (`from-brand
+to-brand-soft`) derivano dai token. Non reintrodurre hex letterali (`bg-[#1e3a5f]`).
 
-### Scala ruoli (definita in S1, applicata ai badge in S2)
+---
 
-Decisione Sprint 16.5 — i ruoli si distinguono con **tinte del navy**, mai con
-verde/ambra/rosso (riservati agli stati operativi). L'etichetta ruolo resta
-sempre in testo, mai solo colore.
+## 2. Primitive UI (`src/components/ui/`) — uso corretto
 
-| Ruolo | Tinta | Espressione (S2) |
+| Primitiva | Uso | Note chiave |
 |---|---|---|
-| admin | navy pieno | `bg-brand text-white` |
-| planner | navy intermedio | `bg-brand-soft text-white` |
-| specialist / tecnico | navy tenue | `bg-brand/10 text-brand` |
-| *disattivato* | grigio neutro | `bg-gray-100 text-gray-500` — **stato** che sovrascrive la tinta ruolo, non un colore-ruolo |
+| `PageHeader` | intestazione di ogni pagina | `titolo` + `sottotitolo?` + `backHref?`/`backLabel?` + slot `azioni`. h1 `font-semibold`. |
+| `Card` / `SectionCard` | contenitori e sezioni | `Card` neutro; `SectionCard` con `titolo`/`sottotitolo`/`azione`. Base `rounded-xl border-gray-200 bg-white shadow-sm`. |
+| `Button` / `buttonClasses()` | azioni | varianti `primary` · `secondary` · `ghost` · `danger`; size `md`/`lg`. `min-h-[44px]` incorporato. Usa `buttonClasses(...)` per stilizzare un `<Link>` o un `<button type="submit">`. |
+| `Badge` | pill di stato | tono semantico: `neutral` grigio · `success` verde · `warning` ambra · `danger` rosso · `brand` navy tenue · `archived` slate. |
+| `RoleBadge` | ruolo utente | tinte del **navy** (admin=`bg-brand`, planner=`bg-brand-soft`, specialist=`bg-brand/10`). `etichetta` per label custom (es. "Amministratore"). |
+| `StatoBadge` | stato verbale | fonte di verità + helper `statoVerbaleUI()`. |
+| `AlertBanner` | messaggi success/error/warning/info | `variant` + `role="alert"|"status"`. Sostituisce ogni box messaggio ad-hoc. |
+| `DataTable` | liste | tabella `sm:`↑ / card mobile automatica. `columns` + `renderCard?` + `vuoto` (EmptyState). |
+| `Field` + `Input`/`Textarea`/`Select` | form | `Field` = label+required+descrizione+errore; controlli `rounded-lg`, `text-base` (no zoom iOS), `min-h-[44px]`. |
+| `EmptyState` | stati vuoti | `titolo` + `descrizione?` + CTA opzionale. Copy onesto (mai promettere feature inesistenti). |
+| `ConfirmDialog` | dialoghi conferma / form modali | chrome unica (overlay + bottom-sheet mobile / centrato desktop). Presentazionale e controllato: `aperto`/`onChiudi`/`titolo`/`sottotitolo?`/`children` + `onConferma`/`confermaDisabilitata`/`variante` **oppure** slot `azioni` per controllo totale (busy/error/result gestiti dal chiamante). |
 
-> Oggi `RuoloBadge` usa ancora purple/blue/teal (fuori palette): la conversione
-> a questa scala è parte di **S2** (Badge unificato), non di S1.
+### ConfirmDialog — pattern di adozione (S6)
 
-### Residui hardcoded noti dopo S1 (intenzionali)
+- **Conferma semplice**: `onConferma` + `testoConferma`/`confermaDisabilitata` + `variante`.
+- **Async con busy/errore/result** (Organizzazione): usa lo slot `azioni` con `<Button>`
+  espliciti; gestisci `busy`, `{ok,error}`, `router.refresh()` e permessi nel chiamante.
+- **Form modale**: `<form id="x">` in `children`, submit in `azioni` via
+  `<button type="submit" form="x">` (validazione HTML + Enter preservati).
+- Anti-lockout, fetch dipendenze, disabled: restano nel chiamante, il dialog non li tocca.
 
-- `src/lib/pdf/generaVerbale.ts` — hex per **PDFKit** (server-side, nessun layer
-  CSS): già centralizzati come costanti `BRAND`/`GRIGIO`/colori esito. Non
-  tokenizzabili via CSS. Restano.
-- `src/app/(auth)/login/login-form.tsx` — `hover:bg-[#16304f]`: **variante refuso**
-  del navy hover (differisce di 1 da `#16304e`). Lasciato invariato per non
-  alterare il pixel renderizzato; da normalizzare in S2 con la primitiva `Button`.
-- `src/components/filters/FilterBar.tsx` — `accent-[#dc2626]`: colore **stato**
-  (danger), non brand. I token di stato (ok/warn/danger) arrivano in S2.
+---
 
-## Gerarchia colori di stato
+## 3. Gerarchia colori di stato
 
-Regola unica (Sprint 15.1): **verde = fatto/conforme · ambra = attenzione/parziale ·
-rosso = critico/NC · grigio = incompleto/neutro · grigio scuro = archiviato/sostituito**.
+**verde = fatto/conforme · ambra = attenzione/parziale · rosso = critico/NC ·
+grigio = incompleto/neutro · slate = archiviato/sostituito.** I ruoli **non** usano
+questi colori: usano tinte del navy (vedi RoleBadge).
 
-### Stato verbale — `src/components/ui/StatoBadge.tsx` (fonte di verità unica)
-
-| Stato | Classi | Semantica |
+| Dominio | Sorgente | Valori |
 |---|---|---|
-| bozza | `bg-gray-100 text-gray-600` | incompleto / in lavorazione |
-| chiuso | `bg-green-100 text-green-700` | verbale valido |
-| sostituito | `bg-slate-600 text-white` | archiviato, non più valido |
+| Stato verbale | `StatoBadge` | bozza `neutral` · chiuso `success` · sostituito `archived` |
+| Stato utente | `StatoBadge`-tone via `Badge` | attivo `success` · disattivato `neutral` (grigio, `text-gray-600`) |
+| Esito checklist/PDF | costanti | C verde · PC ambra · NC rosso · NV/NA grigio |
+| Stato slot pianificazione | dominio dedicato | `da_pianificare` grigio · `pianificata` blu (azionabile, deliberato) · `eseguita` verde |
 
-> Prima di Sprint 15.1 la bozza era **blu** (`bg-blue-100`) — default non
-> deliberato. Unificata a **grigio** in tutti i punti (archivio, scheda cliente,
-> scheda sede, header checklist).
+> Stato utente e ruolo sono **assi separati**: il RoleBadge dà il ruolo, il Badge
+> di stato dà attivo/disattivato. Mai fondere i due.
 
-### Esito checklist / PDF — coerente da Sprint 7+
+---
 
-| Esito | Colore | Classe testo/badge |
-|---|---|---|
-| C (conforme) | verde | `#16a34a` / `bg-green-600` |
-| PC (parziale) | ambra | `#f59e0b` / `bg-amber-500` |
-| NC (non conforme) | rosso | `#dc2626` / `bg-red-600` |
-| NV / NA | grigio | `#6b7280` / `bg-gray-*` |
+## 4. Regole mobile-first
 
-### Stato slot pianificazione — `PianificazioneClient` / `PianoVisiteForm`
+- Target touch ≥ **44px** su ogni controllo (già nelle primitive Button/Field).
+- Liste: **DataTable** (tabella desktop / card mobile), mai una tabella schiacciata su mobile.
+- Form: griglie sempre responsive — `grid-cols-1 sm:grid-cols-N` (mai `grid-cols-N` nudo).
+- Input `text-base` (16px) per evitare lo zoom automatico iOS al focus.
+- Dialog: bottom-sheet su mobile (`items-end`), centrato da `sm:` (gestito da ConfirmDialog).
 
-Set **distinto** (dominio pianificazione, non verbali): `da_pianificare`
-`bg-gray-100`, `pianificata` `bg-blue-100` (azionabile), `eseguita`
-`bg-green-100`. Il blu qui è deliberato (stato "pianificata" = agganciabile),
-non confligge con la gerarchia verbali.
+---
 
-Indicatore urgenza slot (bordo sinistro): rosso (scaduta) / ambra (≤30gg) /
-verde (ok) / grigio (eseguita).
+## 5. Radius / ombre / geometria
 
-## Componenti e forme
+`rounded-xl` card · `rounded-lg` bottoni/input · `rounded-full` badge · `rounded-md`
+alert/dialog interni. Ombra `shadow-sm` sulle card.
 
-| Elemento | Classi ricorrenti |
-|---|---|
-| Card | `rounded-xl border border-gray-200 bg-white shadow-sm` (padding `p-4`/`p-5`) |
-| Bottone primario | `rounded-lg bg-[#1e3a5f] px-4 text-sm font-semibold text-white hover:bg-[#16304e]` |
-| Bottone secondario | `rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50` |
-| Input/select | `min-h-[44px] rounded-lg border border-gray-300 px-3 focus:ring-1 focus:ring-[#1e3a5f]` |
-| Badge pill | `rounded-full px-2.5 py-0.5 text-xs font-semibold` |
-| Empty state | `rounded-xl border border-dashed border-gray-300` (`src/components/ui/EmptyState.tsx`) |
-| Loading | spinner `border-t-[#1e3a5f] animate-spin` (`(dashboard)/loading.tsx`) |
+---
 
-**Radius:** `rounded-xl` (card), `rounded-lg` (bottoni/input), `rounded-full`
-(badge), `rounded-md` (note/alert). **Ombre:** `shadow-sm` sulle card.
-**Target touch:** `min-h-[44px]` sui controlli usati in campo.
+## 6. Microcopy e linguaggio errori
 
-## Componenti condivisi (Sprint 15.1)
+- UI interamente in **italiano**; termini tecnici standard mantenuti (PDF, email).
+- **Nessun errore grezzo Supabase/Postgres** all'utente. Messaggi mappati (helper
+  `messaggioErrore` in `organizzazione/actions.ts`), coerenti tra Organizzazione e Profilo:
+  - email duplicata → «Esiste già un utente con questa email.»
+  - permessi → «Non hai i permessi per modificare questo utente.»
+  - anti-lockout → «Deve rimanere almeno un admin attivo.»
+  - generico → «Operazione non completata. Riprova o verifica i dati inseriti.»
+- Successi brevi e non tecnici (es. «Profilo aggiornato.»), resi con `AlertBanner`.
 
-- `src/components/ui/StatoBadge.tsx` — badge stato verbale + helper `statoVerbaleUI()`.
-- `src/components/ui/EmptyState.tsx` — empty state con CTA.
-- `src/app/(dashboard)/loading.tsx` — loading spinner condiviso.
+---
 
-## Incoerenze risolte in Sprint 15.1
+## 7. Cosa EVITARE
 
-- **`BadgeVerbale` duplicato** verbatim (copia-incolla) in `visite/page.tsx` e
-  `clienti/[id]/page.tsx` → estratto in `StatoBadge` condiviso.
-- **Bozza blu → grigio** in tutti i punti (gerarchia stato corretta).
-- **Empty state** disomogenei → componente `EmptyState` unico.
-- **Accenti KPI** allineati (In bozza → ambra = attenzione).
+- ❌ Classi bespoke che duplicano una primitiva (`inputCls` locale, `btnPrimary`
+  inline, card/tabella ricopiate a mano).
+- ❌ Colori hardcoded/off-palette: hex `bg-[#…]` al posto dei token; purple/blue/teal
+  per i ruoli (usare RoleBadge navy); `text-gray-500` per stati (usare `Badge` tone).
+- ❌ Modali clonate a mano: usare `ConfirmDialog` (chrome unica). Nessun secondo
+  sistema di modali parallelo.
+- ❌ `window.confirm` dove `ConfirmDialog` è applicabile.
+- ❌ `grid-cols-N` senza breakpoint `sm:` nei form.
+- ❌ EmptyState che implica funzionalità non esistenti.
 
-## Incoerenze note ancora aperte
+---
 
-- I badge slot pianificazione usano un set proprio (blu per "pianificata"):
-  deliberato, ma da rivalutare se in futuro si unifica tutto in un design system.
-- Nessuna libreria di componenti: forme replicate via classi. Un'estrazione
-  completa (Button/Card/Input condivisi) è un refactor futuro, fuori scope P1.
+## 8. Residui hardcoded noti (intenzionali)
 
-## Microcopy e lingua
+- `src/lib/pdf/generaVerbale.ts` — hex per **PDFKit** (server-side, nessun layer CSS):
+  centralizzati come costanti. Non tokenizzabili via CSS. Restano.
+- Stato slot pianificazione: set colore proprio (blu "pianificata" deliberato).
+- `window.confirm` residui (fuori dai casi ConfirmDialog attuali): vedi `AzioniVerbale`
+  (elimina bozza) e `PianoVisiteForm` (ricalcolo piano) — conferme **client con
+  gestione risultato/busy** non ancora astratte in una primitiva async dedicata.
 
-Interfaccia interamente in **italiano**. Termini tecnici standard mantenuti
-(PDF, email). Nessuna label in inglese nell'UI utente.
+---
+
+*Chiusura Sprint 16.5 (S1 token → S2 primitive → S3 mobile → S4 dashboard → S5 CRUD
+polish → S6 Organizzazione/Profilo). Questo file è documentale: aggiornarlo quando il
+sistema UI cambia davvero.*

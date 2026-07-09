@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { PianoRiepilogo } from "@/lib/db/queries/pianificazione";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { generaProssimoCicloAction } from "./actions";
 
 export default function PianiContrattuali({ piani }: { piani: PianoRiepilogo[] }) {
@@ -11,19 +12,17 @@ export default function PianiContrattuali({ piani }: { piani: PianoRiepilogo[] }
   const [aperto, setAperto] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [conferma, setConferma] = useState<PianoRiepilogo | null>(null);
 
   if (piani.length === 0) return null;
   const generabili = piani.filter((p) => p.puoGenerareProssimo).length;
 
-  async function genera(p: PianoRiepilogo) {
-    const ok = window.confirm(
-      `Generare il ciclo ${p.cicloCorrente + 1} per ${p.clienteNome} · ${p.sedeNome}? Verranno create ${p.visiteAnno} nuove visite pianificate.`
-    );
-    if (!ok) return;
+  async function eseguiGenera(p: PianoRiepilogo) {
     setBusy(p.pianoId);
     setMsg(null);
     const res = await generaProssimoCicloAction(p.pianoId);
     setBusy(null);
+    setConferma(null);
     if (res.ok) {
       setMsg(`Ciclo ${p.cicloCorrente + 1} generato per ${p.sedeNome} (${res.nuovi} visite).`);
       router.refresh();
@@ -67,7 +66,7 @@ export default function PianiContrattuali({ piani }: { piani: PianoRiepilogo[] }
                 </div>
                 <button
                   type="button"
-                  onClick={() => genera(p)}
+                  onClick={() => setConferma(p)}
                   disabled={!p.puoGenerareProssimo || busy === p.pianoId}
                   title={
                     p.puoGenerareProssimo
@@ -88,6 +87,26 @@ export default function PianiContrattuali({ piani }: { piani: PianoRiepilogo[] }
           </ul>
         </div>
       )}
+
+      <ConfirmDialog
+        aperto={conferma !== null}
+        onChiudi={() => {
+          if (busy) return;
+          setConferma(null);
+        }}
+        titolo="Genera prossimo ciclo"
+        onConferma={() => conferma && eseguiGenera(conferma)}
+        testoConferma={conferma && busy === conferma.pianoId ? "Generazione…" : "Genera"}
+        confermaDisabilitata={conferma !== null && busy === conferma.pianoId}
+      >
+        {conferma && (
+          <p>
+            Generare il ciclo {conferma.cicloCorrente + 1} per{" "}
+            <strong>{conferma.clienteNome}</strong> · {conferma.sedeNome}? Verranno create{" "}
+            {conferma.visiteAnno} nuove visite pianificate.
+          </p>
+        )}
+      </ConfirmDialog>
     </section>
   );
 }
