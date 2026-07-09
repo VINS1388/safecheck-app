@@ -7,13 +7,7 @@ import AlertBanner from "@/components/ui/AlertBanner";
 import EmptyState from "@/components/ui/EmptyState";
 import DataTable, { type Column } from "@/components/ui/DataTable";
 import { buttonClasses } from "@/components/ui/Button";
-
-interface ClienteRiga {
-  id: string;
-  ragione_sociale: string;
-  citta: string | null;
-  n_sedi: number;
-}
+import ClientiFiltrati, { type ClienteRiga } from "./ClientiFiltrati";
 
 export default async function ClientiPage({
   searchParams,
@@ -118,7 +112,11 @@ export default async function ClientiPage({
         </div>
       )}
 
-      <DataTable columns={columns} rows={clienti} keyOf={(c) => c.id} vuoto={vuoto} />
+      {vistaArchiviati ? (
+        <DataTable columns={columns} rows={clienti} keyOf={(c) => c.id} vuoto={vuoto} />
+      ) : (
+        <ClientiFiltrati clienti={clienti} vuoto={vuoto} />
+      )}
     </main>
   );
 }
