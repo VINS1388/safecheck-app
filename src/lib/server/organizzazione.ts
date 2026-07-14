@@ -2,59 +2,51 @@ import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageUsers } from "@/lib/auth/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAuditEvent } from "@/lib/audit/logAuditEvent";
 import { generaPasswordTemporanea } from "./genera-password";
-import type { Tables, Enums } from "@/types/database.types";
-
-export { generaPasswordTemporanea };
+import {
+  OrgError,
+  CAMPI_LISTA,
+  getUtenteById,
+  contaAltriAdminAttivi,
+  creaUtenteCore,
+  cambiaRuoloCore,
+  impostaAttivoCore,
+  type RuoloUtente,
+  type UtenteLista,
+} from "./organizzazione-core";
 
 /**
  * MODULO DATI UNICO per la gestione utenti (area /organizzazione, Sprint 16 —
- * Checkpoint 2). Tutte le query e le mutazioni sugli utenti vivono QUI: è il
- * prerequisito per la migrazione Fase 3 da `utenti.ruolo` a una membership
- * per-organizzazione (cambierà solo l'implementazione di queste funzioni).
+ * Checkpoint 2) e UNICO ENTRY POINT PUBBLICO. La business logic pura vive in
+ * `./organizzazione-core` (senza `server-only`, testabile da script Node);
+ * QUI restano l'autenticazione, il service role e la tracciabilità audit.
  *
  * ENFORCEMENT DI SICUREZZA (non bypassabile): ogni funzione, come PRIMO passo,
  * chiama `requireAdmin()` — verifica dalla sessione server-side che il chiamante
  * sia un admin ATTIVO. Solo DOPO questa verifica si istanzia il service role
- * (`createAdminClient`, necessario per la Admin API di Supabase Auth). Il client
- * non è mai fonte di verità per identità/permessi. Il service role è creato
- * esclusivamente dentro queste funzioni, mai prima del guard.
+ * (`createAdminClient`, necessario per la Admin API di Supabase Auth) e si delega
+ * al Core. Il client non è mai fonte di verità per identità/permessi.
  *
- * ANTI-LOCKOUT (difesa in profondità): il check applicativo qui sotto rifiuta di
+ * ANTI-LOCKOUT (difesa in profondità): il check applicativo (nel Core) rifiuta di
  * disattivare o retrocedere l'ultimo admin attivo (incluso il caso self). È la
  * prima linea; sotto c'è il trigger DB `trg_utenti_anti_lockout` (migration 027,
  * errcode SC001) che serializza e blocca in modo race-safe anche via service role.
+ *
+ * DUAL-WRITE (Sprint 19.B): `creaUtente`/`cambiaRuolo`/`impostaAttivo` allineano
+ * `organizzazione_membri` a `utenti.ruolo/attivo` (nel Core). Un disallineamento
+ * emerge come `OrgError("membership_disallineata")`: qui lo si registra in audit
+ * (best-effort, non bloccante) e lo si ri-mappa a `OrgError("generico")`, così il
+ * contratto d'errore verso le action non cambia. Nessuna RLS è toccata.
  */
 
-export type RuoloUtente = Enums<"ruolo_utente">; // "admin" | "specialist" | "planner"
-export type UtenteLista = Pick<
-  Tables<"utenti">,
-  "id" | "email" | "nome_completo" | "ruolo" | "telefono" | "qualifica" | "attivo" | "creato_il"
->;
-
-const CAMPI_LISTA = "id, email, nome_completo, ruolo, telefono, qualifica, attivo, creato_il";
-const RUOLI: readonly RuoloUtente[] = ["admin", "planner", "specialist"];
-export function isRuoloValido(x: string): x is RuoloUtente {
-  return (RUOLI as readonly string[]).includes(x);
-}
-
-export type OrgErrorCode =
-  | "non_autorizzato"
-  | "email_duplicata"
-  | "ultimo_admin"
-  | "non_trovato"
-  | "input_invalido"
-  | "generico";
-
-/** Errore tipizzato: il codice guida la mappatura del messaggio nell'action. */
-export class OrgError extends Error {
-  code: OrgErrorCode;
-  constructor(code: OrgErrorCode, message?: string) {
-    super(message ?? code);
-    this.code = code;
-    this.name = "OrgError";
-  }
-}
+// Re-export della superficie pubblica migrata nel Core (import esterni esistenti:
+// actions.ts, page.tsx, OrganizzazioneClient.tsx) + password temporanea.
+export { generaPasswordTemporanea };
+export { isRuoloValido } from "./organizzazione-core";
+export { OrgError };
+export type { RuoloUtente, UtenteLista };
+export type { OrgErrorCode } from "./organizzazione-core";
 
 /** Verifica che il chiamante sia admin attivo. Ritorna il suo profilo. */
 async function requireAdmin() {
@@ -69,30 +61,6 @@ async function requireAdmin() {
 // Password temporanea: generata da `./genera-password` (CSPRNG, modulo puro
 // unit-testato). Restituita una sola volta, mai loggata/persistita/negli errori.
 
-// ── Helper interni (assumono guard già passato) ─────────────────────────────
-type AdminClient = ReturnType<typeof createAdminClient>;
-
-async function getUtenteById(admin: AdminClient, id: string): Promise<UtenteLista> {
-  const { data, error } = await admin
-    .from("utenti")
-    .select(CAMPI_LISTA)
-    .eq("id", id)
-    .single();
-  if (error || !data) throw new OrgError("non_trovato");
-  return data as UtenteLista;
-}
-
-async function contaAltriAdminAttivi(admin: AdminClient, escludiId: string): Promise<number> {
-  const { count, error } = await admin
-    .from("utenti")
-    .select("id", { count: "exact", head: true })
-    .eq("ruolo", "admin")
-    .eq("attivo", true)
-    .neq("id", escludiId);
-  if (error) throw new OrgError("generico", error.message);
-  return count ?? 0;
-}
-
 // ── Query ────────────────────────────────────────────────────────────────────
 export async function listaUtenti(): Promise<UtenteLista[]> {
   await requireAdmin();
@@ -106,60 +74,56 @@ export async function listaUtenti(): Promise<UtenteLista[]> {
   return (data ?? []) as UtenteLista[];
 }
 
-// ── Mutazioni ────────────────────────────────────────────────────────────────
+// ── Mutazioni (wrapper: guard + service role + delega al Core + audit) ────────
 
 /**
- * Crea un utente: Admin API (email già confermata) + normalizzazione del profilo.
- * Il trigger handle_new_user (004) inserisce la riga utenti dai metadata; qui la
- * si allinea a nome/ruolo/attivo definitivi. Se il passo post-creazione fallisce,
- * l'auth user viene rimosso (cleanup) per non lasciare orfani.
- * Restituisce la password temporanea UNA volta (mai loggata/persistita).
+ * Best-effort audit di un fallimento di dual-write membership, poi ri-mappa
+ * `membership_disallineata` → `generico`. Gli altri OrgError si propagano
+ * invariati. `logAuditEvent` è già non bloccante (ingoia i propri errori).
+ */
+async function rimappaDisallineamento(
+  e: unknown,
+  actorUserId: string,
+  operazione: string,
+  fallbackEntityId: string,
+  messaggioUtente: string,
+  payloadExtra: Record<string, unknown> = {}
+): Promise<never> {
+  if (e instanceof OrgError && e.code === "membership_disallineata") {
+    await logAuditEvent({
+      entityType: "utente",
+      entityId: e.entityId ?? fallbackEntityId,
+      eventType: "organizzazione_membri_dual_write_fallito",
+      actorUserId,
+      payload: { operazione, messaggio: e.message, ...payloadExtra },
+    });
+    throw new OrgError("generico", messaggioUtente);
+  }
+  throw e;
+}
+
+/**
+ * Crea un utente (Admin API + profilo + membership). Restituisce la password
+ * temporanea UNA volta (mai loggata/persistita).
  */
 export async function creaUtente(input: {
   nome: string;
   email: string;
   ruolo: RuoloUtente;
 }): Promise<{ tempPassword: string; utente: UtenteLista }> {
-  await requireAdmin();
-  const nome = input.nome.trim();
-  const email = input.email.trim().toLowerCase();
-  if (!nome) throw new OrgError("input_invalido", "Il nome è obbligatorio.");
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
-    throw new OrgError("input_invalido", "L'indirizzo email non è valido.");
-  if (!isRuoloValido(input.ruolo))
-    throw new OrgError("input_invalido", "Il ruolo selezionato non è valido.");
-
+  const chiamante = await requireAdmin();
   const admin = createAdminClient();
-  const password = generaPasswordTemporanea();
-
-  const { data: created, error: cErr } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { nome_completo: nome, ruolo: input.ruolo },
-  });
-  if (cErr || !created?.user) {
-    const msg = (cErr?.message ?? "").toLowerCase();
-    const status = (cErr as { status?: number } | null)?.status;
-    if (status === 422 || /already|registered|exists|duplicate/.test(msg)) {
-      throw new OrgError("email_duplicata");
-    }
-    throw new OrgError("generico", cErr?.message);
-  }
-
-  const uid = created.user.id;
   try {
-    const { error: uErr } = await admin
-      .from("utenti")
-      .update({ nome_completo: nome, ruolo: input.ruolo, attivo: true })
-      .eq("id", uid);
-    if (uErr) throw new OrgError("generico", uErr.message);
-    const utente = await getUtenteById(admin, uid);
-    return { tempPassword: password, utente };
+    return await creaUtenteCore(admin, chiamante.id, input);
   } catch (e) {
-    // Cleanup: l'auth user esiste ma il profilo non è coerente → rimuovilo.
-    await admin.auth.admin.deleteUser(uid).catch(() => {});
-    throw e instanceof OrgError ? e : new OrgError("generico");
+    return await rimappaDisallineamento(
+      e,
+      chiamante.id,
+      "creaUtente",
+      chiamante.id,
+      "Creazione utente non riuscita (allineamento organizzazione).",
+      { ruolo: input.ruolo }
+    );
   }
 }
 
@@ -189,44 +153,40 @@ export async function aggiornaAnagraficaUtente(
   return getUtenteById(admin, userId);
 }
 
-/** Cambia il ruolo di un utente. Anti-lockout su retrocessione dell'ultimo admin. */
+/** Cambia il ruolo di un utente. Anti-lockout + dual-write membership nel Core. */
 export async function cambiaRuolo(userId: string, nuovoRuolo: RuoloUtente): Promise<UtenteLista> {
-  await requireAdmin();
-  if (!isRuoloValido(nuovoRuolo))
-    throw new OrgError("input_invalido", "Il ruolo selezionato non è valido.");
+  const chiamante = await requireAdmin();
   const admin = createAdminClient();
-  const target = await getUtenteById(admin, userId);
-
-  if (target.ruolo === "admin" && target.attivo && nuovoRuolo !== "admin") {
-    if ((await contaAltriAdminAttivi(admin, userId)) === 0) throw new OrgError("ultimo_admin");
+  try {
+    return await cambiaRuoloCore(admin, userId, nuovoRuolo);
+  } catch (e) {
+    return await rimappaDisallineamento(
+      e,
+      chiamante.id,
+      "cambiaRuolo",
+      userId,
+      "Ruolo aggiornato sull'utente ma non sull'organizzazione: contatta il supporto.",
+      { nuovoRuolo }
+    );
   }
-  if (target.ruolo === nuovoRuolo) return target; // no-op
-
-  const { error } = await admin.from("utenti").update({ ruolo: nuovoRuolo }).eq("id", userId);
-  if (error) {
-    if (error.code === "SC001") throw new OrgError("ultimo_admin"); // backstop DB
-    throw new OrgError("generico", error.message);
-  }
-  return { ...target, ruolo: nuovoRuolo };
 }
 
-/** Attiva/disattiva un utente. Anti-lockout su disattivazione dell'ultimo admin. */
+/** Attiva/disattiva un utente. Anti-lockout + dual-write membership nel Core. */
 export async function impostaAttivo(userId: string, attivo: boolean): Promise<UtenteLista> {
-  await requireAdmin();
+  const chiamante = await requireAdmin();
   const admin = createAdminClient();
-  const target = await getUtenteById(admin, userId);
-
-  if (!attivo && target.ruolo === "admin" && target.attivo) {
-    if ((await contaAltriAdminAttivi(admin, userId)) === 0) throw new OrgError("ultimo_admin");
+  try {
+    return await impostaAttivoCore(admin, userId, attivo);
+  } catch (e) {
+    return await rimappaDisallineamento(
+      e,
+      chiamante.id,
+      "impostaAttivo",
+      userId,
+      "Stato aggiornato sull'utente ma non sull'organizzazione: contatta il supporto.",
+      { attivo }
+    );
   }
-  if (target.attivo === attivo) return target; // no-op
-
-  const { error } = await admin.from("utenti").update({ attivo }).eq("id", userId);
-  if (error) {
-    if (error.code === "SC001") throw new OrgError("ultimo_admin"); // backstop DB
-    throw new OrgError("generico", error.message);
-  }
-  return { ...target, attivo };
 }
 
 /** Reset password: genera una nuova temporanea e la applica. Restituita una volta. */
@@ -287,6 +247,7 @@ export async function dipendenzeUtente(userId: string): Promise<DipendenzeUtente
  * (dipendenzeUtente.totale === 0). Guardrail: mai sé stessi, mai l'ultimo admin
  * attivo (app-level + trigger 027 come rete DB sulla cascata auth.users→utenti).
  * Ri-verifica le dipendenze server-side PRIMA del delete (non solo in UI).
+ * La membership in `organizzazione_membri` sparisce via FK ON DELETE CASCADE.
  */
 export async function eliminaUtenteFisico(userId: string): Promise<void> {
   const chiamante = await requireAdmin();

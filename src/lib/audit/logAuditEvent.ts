@@ -38,6 +38,7 @@ export type AuditEventType =
   | "utente.riattivato"
   | "utente.eliminato_fisico"
   | "utente.password_reset"
+  | "organizzazione_membri_dual_write_fallito"
   // Clienti
   | "cliente.creato"
   | "cliente.disattivato"
