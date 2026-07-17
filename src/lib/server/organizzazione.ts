@@ -12,6 +12,7 @@ import {
   creaUtenteCore,
   cambiaRuoloCore,
   impostaAttivoCore,
+  orgIdChiamante,
   type RuoloUtente,
   type UtenteLista,
 } from "./organizzazione-core";
@@ -48,6 +49,17 @@ export { OrgError };
 export type { RuoloUtente, UtenteLista };
 export type { OrgErrorCode } from "./organizzazione-core";
 
+/**
+ * Riga utente arricchita con lo stato della membership nell'organizzazione
+ * corrente (Sprint 19.D, preparazione multi-org). `membershipStato` viene da
+ * `organizzazione_membri.stato` (attivo/sospeso), distinto da `utenti.attivo`:
+ * oggi coincidono (dual-write 19.B), la distinzione conterà con più org. Null se
+ * l'utente non ha una membership nell'org corrente (o org non risolvibile).
+ */
+export interface UtenteConMembership extends UtenteLista {
+  membershipStato: string | null;
+}
+
 /** Verifica che il chiamante sia admin attivo. Ritorna il suo profilo. */
 async function requireAdmin() {
   const { user, profilo } = await getCurrentUser();
@@ -62,8 +74,8 @@ async function requireAdmin() {
 // unit-testato). Restituita una sola volta, mai loggata/persistita/negli errori.
 
 // ── Query ────────────────────────────────────────────────────────────────────
-export async function listaUtenti(): Promise<UtenteLista[]> {
-  await requireAdmin();
+export async function listaUtenti(): Promise<UtenteConMembership[]> {
+  const chiamante = await requireAdmin();
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("utenti")
@@ -71,7 +83,27 @@ export async function listaUtenti(): Promise<UtenteLista[]> {
     .order("attivo", { ascending: false })
     .order("nome_completo", { ascending: true });
   if (error) throw new OrgError("generico", error.message);
-  return (data ?? []) as UtenteLista[];
+  const utenti = (data ?? []) as UtenteLista[];
+
+  // Stato membership nell'org corrente (Sprint 19.D). Fail-closed sull'org del
+  // chiamante; se non risolvibile (caso limite) la colonna resta null e la
+  // gestione utenti resta pienamente funzionale — è un indicatore informativo,
+  // non deve rompere la pagina.
+  let statoByUser = new Map<string, string>();
+  try {
+    const orgId = await orgIdChiamante(admin, chiamante.id);
+    const { data: membri } = await admin
+      .from("organizzazione_membri")
+      .select("user_id, stato")
+      .eq("organization_id", orgId);
+    statoByUser = new Map(
+      ((membri ?? []) as { user_id: string; stato: string }[]).map((m) => [m.user_id, m.stato])
+    );
+  } catch {
+    // org non risolvibile: membershipStato = null per tutti.
+  }
+
+  return utenti.map((u) => ({ ...u, membershipStato: statoByUser.get(u.id) ?? null }));
 }
 
 // ── Mutazioni (wrapper: guard + service role + delega al Core + audit) ────────

@@ -24,7 +24,7 @@ import {
   eliminaUtenteFisicoAction,
 } from "./actions";
 import type { DipendenzeUtente } from "@/lib/server/organizzazione";
-import type { RuoloUtente, UtenteLista } from "@/lib/server/organizzazione";
+import type { RuoloUtente, UtenteLista, UtenteConMembership } from "@/lib/server/organizzazione";
 import type { ProfiloOrganizzazione } from "@/lib/server/org-profilo";
 
 // ── Costanti presentazione ───────────────────────────────────────────────────
@@ -73,7 +73,7 @@ export default function OrganizzazioneClient({
   riepilogo,
   organizzazione,
 }: {
-  utenti: UtenteLista[];
+  utenti: UtenteConMembership[];
   riepilogo: Riepilogo;
   organizzazione: ProfiloOrganizzazione | null;
 }) {
@@ -108,7 +108,7 @@ export default function OrganizzazioneClient({
     router.refresh();
   };
 
-  const columns: Column<UtenteLista>[] = [
+  const columns: Column<UtenteConMembership>[] = [
     {
       header: "Utente",
       cell: (u) => (
@@ -120,6 +120,7 @@ export default function OrganizzazioneClient({
     },
     { header: "Ruolo", cell: (u) => <RoleBadge ruolo={u.ruolo} etichetta={RUOLO_LABEL[u.ruolo]} /> },
     { header: "Stato", cell: (u) => <StatoUtente attivo={u.attivo} /> },
+    { header: "Membership", cell: (u) => <MembershipStato stato={u.membershipStato} /> },
     { header: "Creato", className: "text-gray-500", cell: (u) => formattaData(u.creato_il) },
     {
       header: "Azioni",
@@ -223,6 +224,15 @@ export default function OrganizzazioneClient({
         </div>
       </div>
 
+      {/* Nota Membership (Sprint 19.D): distingue lo stato della membership
+          nell'org corrente dallo stato dell'account, in vista del multi-org. */}
+      <p className="text-xs text-gray-400">
+        La colonna «Membership» mostra lo stato dell&apos;appartenenza
+        all&apos;organizzazione corrente (organizzazione_membri), distinto dallo stato
+        dell&apos;account (utenti.attivo). Oggi i due coincidono; la distinzione
+        diventerà rilevante con il multi-organizzazione.
+      </p>
+
       {/* Lista */}
       <DataTable
         columns={columns}
@@ -237,8 +247,9 @@ export default function OrganizzazioneClient({
               </div>
               <StatoUtente attivo={u.attivo} />
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <RoleBadge ruolo={u.ruolo} etichetta={RUOLO_LABEL[u.ruolo]} />
+              <MembershipStato stato={u.membershipStato} />
               <span className="text-xs text-gray-400">· creato {formattaData(u.creato_il)}</span>
             </div>
             <div className="mt-3 border-t border-gray-100 pt-3">
@@ -344,6 +355,19 @@ function StatTile({ label, valore }: { label: string; valore: number }) {
 // Attivo = success (verde) · disattivato = neutral (grigio, text-gray-600 via Badge).
 function StatoUtente({ attivo }: { attivo: boolean }) {
   return <Badge tone={attivo ? "success" : "neutral"}>{attivo ? "Attivo" : "Disattivato"}</Badge>;
+}
+
+// Stato della membership nell'org corrente (organizzazione_membri.stato), read-only.
+// attivo = success · sospeso = warning · assente = neutral "—" (nessuna membership).
+function MembershipStato({ stato }: { stato: string | null }) {
+  if (stato === "attivo") return <Badge tone="success">Attiva</Badge>;
+  if (stato === "sospeso") return <Badge tone="warning">Sospesa</Badge>;
+  if (stato) return <Badge tone="neutral">{stato}</Badge>;
+  return (
+    <Badge tone="neutral" title="Nessuna membership nell'organizzazione corrente">
+      —
+    </Badge>
+  );
 }
 
 function RigaAzioni({

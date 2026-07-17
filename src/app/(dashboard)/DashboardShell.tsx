@@ -18,6 +18,7 @@ const NAV_ADMIN = [{ href: "/organizzazione", label: "Organizzazione" }];
 interface Props {
   nome: string;
   ruolo: string;
+  orgNome?: string | null;
   logoutAction: () => void | Promise<void>;
   children: React.ReactNode;
 }
@@ -25,11 +26,16 @@ interface Props {
 export default function DashboardShell({
   nome,
   ruolo,
+  orgNome,
   logoutAction,
   children,
 }: Props) {
   const [aperto, setAperto] = useState(false);
   const pathname = usePathname();
+
+  // Sottotitolo brand = organizzazione corrente (Sprint 19.D); fallback alla
+  // vecchia tagline se l'org non è ancora seedata.
+  const sottotitolo = orgNome?.trim() || "Sicurezza sul lavoro";
 
   const nav = ruolo === "admin" ? [...NAV_BASE, ...NAV_ADMIN] : NAV_BASE;
 
@@ -59,7 +65,7 @@ export default function DashboardShell({
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col bg-brand text-white sm:flex">
         <div className="px-5 py-5">
           <span className="text-xl font-bold tracking-tight">SafeCheck</span>
-          <p className="mt-0.5 text-[11px] text-white/60">Sicurezza sul lavoro</p>
+          <p className="mt-0.5 truncate text-[11px] text-white/60">{sottotitolo}</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">{navLinks()}</nav>
         <UserBox nome={nome} ruolo={ruolo} logoutAction={logoutAction} />
@@ -69,7 +75,10 @@ export default function DashboardShell({
           delle pagine possono ancorarsi sotto la barra con `top-16` (fix bug #1
           checklist: prima l'header checklist finiva SOTTO questa barra). */}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between bg-brand px-4 text-white sm:hidden">
-        <span className="text-lg font-bold tracking-tight">SafeCheck</span>
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span className="text-lg font-bold tracking-tight">SafeCheck</span>
+          <span className="truncate text-[10px] text-white/60">{sottotitolo}</span>
+        </div>
         <button
           type="button"
           onClick={() => setAperto(true)}
@@ -93,7 +102,10 @@ export default function DashboardShell({
           />
           <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-brand text-white shadow-xl">
             <div className="flex items-center justify-between px-5 py-5">
-              <span className="text-xl font-bold tracking-tight">SafeCheck</span>
+              <div className="flex min-w-0 flex-col leading-tight">
+                <span className="text-xl font-bold tracking-tight">SafeCheck</span>
+                <span className="mt-0.5 truncate text-[11px] text-white/60">{sottotitolo}</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setAperto(false)}
