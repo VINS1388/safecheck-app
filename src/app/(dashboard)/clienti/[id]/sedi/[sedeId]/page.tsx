@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getClienteById } from "@/lib/db/queries/clienti";
 import { getSedeById } from "@/lib/db/queries/sedi";
 import { getVisiteBySede } from "@/lib/db/queries/visite";
-import { getPianoBySede, getSlotByPianoCiclo, getTecnici, getSlotProponibiliBySede } from "@/lib/db/queries/pianificazione";
+import { getPianoBySede, getSlotByPianoCiclo, getSlotProponibiliBySede } from "@/lib/db/queries/pianificazione";
+import { getTecniciAssegnabili } from "@/lib/server/filtri-opzioni";
 import { getModuliSede, getModuliSelezionabiliVisita } from "@/lib/db/queries/moduli";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManagePlanning } from "@/lib/auth/rbac";
@@ -30,11 +31,11 @@ export default async function SedeDettaglioPage({
   const sede = await getSedeById(sedeId);
   if (!sede || sede.cliente_id !== id) notFound();
 
-  const [cliente, visite, piano, tecnici, slotProponibili, { user }, moduliSede, moduliSelezionabili, canManage] = await Promise.all([
+  const [cliente, visite, piano, tecnici, slotProponibili, { user, profilo }, moduliSede, moduliSelezionabili, canManage] = await Promise.all([
     getClienteById(id),
     getVisiteBySede(sedeId),
     getPianoBySede(sedeId),
-    getTecnici(),
+    getTecniciAssegnabili(),
     getSlotProponibiliBySede(sedeId),
     getCurrentUser(),
     getModuliSede(sedeId),
@@ -45,8 +46,15 @@ export default async function SedeDettaglioPage({
   const moduliOpzioni = moduliSelezionabili.map((m) => ({ id: m.id, nomeBreve: m.nomeBreve }));
   const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
   const prossimoSlot = slots.find((s) => s.stato !== "eseguita") ?? null;
+  // Nome del tecnico di default del piano. Per admin/planner il roster
+  // (getTecniciAssegnabili, service-role) risolve chiunque. Per lo specialist il
+  // roster è vuoto (gate canManagePlanning): fallback al proprio profilo quando il
+  // default coincide con sé stesso, così non si perde il caso già visibile via RLS
+  // prima del fix (nessuna regressione; il default altrui restava comunque non
+  // risolvibile per lo specialist).
   const tecnicoNome = piano?.tecnicoAssegnatoId
-    ? tecnici.find((t) => t.id === piano.tecnicoAssegnatoId)?.nomeCompleto ?? null
+    ? tecnici.find((t) => t.id === piano.tecnicoAssegnatoId)?.nomeCompleto
+        ?? (piano.tecnicoAssegnatoId === profilo?.id ? profilo?.nome_completo ?? null : null)
     : null;
 
   const ultimoChiuso = visite.find((v) => v.stato_verbale === "chiuso") ?? null;

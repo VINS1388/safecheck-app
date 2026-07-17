@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canManagePlanning } from "@/lib/auth/rbac";
+import type { TecnicoOption } from "@/types";
 
 /**
  * Provider delle opzioni per la FilterBar (Sprint 16.5).
@@ -52,6 +53,35 @@ export async function getTecniciOpzioni(): Promise<Opzione[]> {
     .in("ruolo", ["admin", "specialist"])
     .order("nome_completo", { ascending: true });
   return (data ?? []).map((u) => ({ value: u.id, label: u.nome_completo }));
+}
+
+/**
+ * Roster tecnici assegnabili come `TecnicoOption[]` (con `ruolo`), per i form che
+ * assegnano un tecnico — es. "Tecnico predefinito" del piano visite in
+ * `PianoVisiteForm`. Stesso gate e stesso roster (admin+specialist attivi) di
+ * `getTecniciOpzioni`, ma forma `TecnicoOption` invece di `Opzione` semplice.
+ *
+ * Perché non `getTecnici()` (che gira su client RLS): la RLS su `utenti` è
+ * own_or_admin → un planner leggerebbe solo la propria riga, mai il roster (il bug
+ * del dropdown "Tecnico predefinito"). Qui si verifica `canManagePlanning()` e SOLO
+ * dopo si usa il service role — stessa esposizione mirata già in uso per il filtro
+ * "Tecnico" della FilterBar. Vuoto se il chiamante non è admin/planner. Nessuna RLS
+ * riaperta, nessuna migration.
+ */
+export async function getTecniciAssegnabili(): Promise<TecnicoOption[]> {
+  if (!(await canManagePlanning())) return [];
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("utenti")
+    .select("id, nome_completo, ruolo")
+    .eq("attivo", true)
+    .in("ruolo", ["admin", "specialist"])
+    .order("nome_completo", { ascending: true });
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    nomeCompleto: u.nome_completo,
+    ruolo: u.ruolo,
+  }));
 }
 
 /**

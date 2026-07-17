@@ -3,8 +3,8 @@ import { getSedeById } from "@/lib/db/queries/sedi";
 import {
   getPianoBySede,
   getSlotByPianoCiclo,
-  getTecnici,
 } from "@/lib/db/queries/pianificazione";
+import { getTecniciAssegnabili } from "@/lib/server/filtri-opzioni";
 import SedeForm from "../../SedeForm";
 import { aggiornaSedeAction } from "../../actions";
 import PianoVisiteForm from "./PianoVisiteForm";
@@ -22,7 +22,7 @@ export default async function ModificaSedePage({
     notFound();
   }
 
-  const [piano, tecnici] = await Promise.all([getPianoBySede(sedeId), getTecnici()]);
+  const [piano, tecnici] = await Promise.all([getPianoBySede(sedeId), getTecniciAssegnabili()]);
   const slots = piano ? await getSlotByPianoCiclo(piano.id, piano.cicloCorrente) : [];
 
   return (
